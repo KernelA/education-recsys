@@ -1,5 +1,5 @@
 pyyaml
-pandas[performance]~=2.0.0
+pandas[performance]~=2.0.1
 more_itertools
 numpy~=1.20
 ipykernel
