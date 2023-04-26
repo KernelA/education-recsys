@@ -5,23 +5,24 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from .implicit_model import ImplicitRecommender
-from .matrix_ops import interactions_to_csr_matrix
+from .implicit_model import ModelRecommender
 
 
-def implicit_cross_validate(interactions: pd.DataFrame, item_mapping, folds, model_factory: Callable[[], ImplicitRecommender], n: int):
+def model_cross_validate(interactions: pd.DataFrame, item_features: pd.DataFrame, user_features: pd.DataFrame, folds, model_factory: Callable[[], ModelRecommender], n: int):
     validation_results = []
 
     for num_fold, (train_idx, test_idx, info) in enumerate(tqdm(folds), 1):
         train: pd.DataFrame = interactions.loc[train_idx]
         test: pd.DataFrame = interactions.loc[test_idx]
+        train_item_features: pd.DataFrame = item_features[item_features.index.isin(train.index.get_level_values("item_id").unique())]
+        train_user_features: pd.DataFrame = user_features[user_features.index.isin(train.index.get_level_values("user_id").unique())]
 
-        model: ImplicitRecommender = model_factory()
-        train_matrix = interactions_to_csr_matrix(train, model.user_mapping, item_mapping)
-        model.fit(train_matrix, progress=False)
+        model: ModelRecommender = model_factory()
+        model.fit(train, progress=False, train_item_features=train_item_features, train_user_features=train_user_features)
         pred_recs = model.recommend(test.index.get_level_values("user_id").unique().to_numpy(), n)
 
-        metrics = compute_metrics(test, pred_recs, n).transpose()
+        metrics = compute_metrics(test, pred_recs, n)
+        metrics = metrics.reset_index(names=["metric_name"])
         metrics["model"] = model.model_name()
         metrics["start_date"] = info["Start date"]
         metrics["end_date"] = info["End date"]
@@ -29,6 +30,7 @@ def implicit_cross_validate(interactions: pd.DataFrame, item_mapping, folds, mod
         validation_results.append(metrics)
 
     cv_results = pd.concat(validation_results)
+    cv_results["model"] = cv_results["model"].astype("category")
 
     return cv_results.sort_values("start_date"), model
 
