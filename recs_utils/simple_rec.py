@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
+import datetime
 
+import polars as pl
 import pandas as pd
+import numpy as np
 
 
 class BaseRecommender(ABC):
@@ -12,7 +15,7 @@ class BaseRecommender(ABC):
         self.user_column = user_col
 
     @abstractmethod
-    def fit(self, interactions: pd.DataFrame, user_features=None, item_features=None):
+    def fit(self, interactions: pl.DataFrame, user_features=None, item_features=None):
         raise NotImplementedError()
 
     @abstractmethod
@@ -23,72 +26,118 @@ class BaseRecommender(ABC):
 class PopularRecommender(BaseRecommender):
     def __init__(self, max_K: int = 100, days: int = 30,  user_col: str = "user_id", item_column: str = 'item_id', dt_column: str = 'start_date'):
         super().__init__(max_K, days, user_col, item_column, dt_column)
-        self.recommendations = []
+        self.recommendations: pl.DataFrame = None
 
-    def fit(self, interactions: pd.DataFrame, user_features=None, item_features=None):
-        min_date = interactions[self.dt_column].max().normalize() - pd.DateOffset(days=self.days)
-        self.recommendations = interactions.loc[interactions[self.dt_column] > min_date].reset_index(
-        )[self.item_column].value_counts().head(self.max_K).index.values.tolist()
+    def fit(self, interactions: pl.DataFrame, user_features=None, item_features=None):
+        min_date = interactions.select(pl.col(self.dt_column).max())[
+            0, 0] - datetime.timedelta(days=self.days)
 
-    def predict(self, user_features: pd.DataFrame, N: int = 10):
-        recs_items = self.recommendations[:N]
+        self.recommendations = interactions.lazy()\
+            .filter(pl.col(self.dt_column) > min_date)\
+            .groupby(self.item_column)\
+            .count()\
+            .top_k(self.max_K, by="count")\
+            .select(pl.col(self.item_column))\
+            .with_columns(
+            (pl.col(self.item_column).cumcount() + 1).alias("rank"))\
+            .collect()\
 
-        recs = pd.DataFrame(
+
+    def predict(self, user_features: pl.DataFrame, N: int = 10):
+        assert self.recommendations is not None
+
+        recs_items = self.recommendations.head(n=N)
+        uniq_users = user_features.select(pl.col(self.user_column).unique()).to_series().to_numpy()
+
+        recs = pl.DataFrame(
             {
-                self.user_column: user_features.index.unique(self.user_column).to_numpy().repeat(len(recs_items)),
-                self.item_column: recs_items * user_features.index.unique(self.user_column).size,
+                self.user_column: uniq_users.repeat(len(recs_items)),
+                self.item_column: np.tile(recs_items.select(pl.col(self.item_column)).to_series().to_numpy(), len(uniq_users)),
+                "rank": np.tile(recs_items.select(pl.col("rank")).to_series().to_numpy(), len(uniq_users)),
             }
         )
 
-        recs["rank"] = recs.groupby(self.user_column).cumcount() + 1
-
-        return recs.set_index([self.user_column, self.item_column])
+        return recs
 
 
 class PopularRecommenderPerAge(BaseRecommender):
     def __init__(self, max_K: int = 100, days: int = 30,  user_col: str = "user_id", item_column: str = 'item_id', dt_column: str = 'start_date'):
         super().__init__(max_K, days, user_col, item_column, dt_column)
-        self.recommendations = {}
+        self.recommendations_per_age: pl.DataFrame = None
         self._top_n = PopularRecommender(max_K, days, user_col, item_column, dt_column)
 
-    def fit(self, interactions: pd.DataFrame, user_features, item_features=None):
-        min_date = interactions[self.dt_column].max().normalize() - pd.DateOffset(days=self.days)
+    def fit(self, interactions: pl.DataFrame, user_features: pl.DataFrame, item_features=None):
+        min_date = interactions.select(pl.col(self.dt_column).max())[
+            0, 0] - datetime.timedelta(days=self.days)
 
-        self.recommendations = pd.merge(
-            interactions[interactions[self.dt_column] > min_date].reset_index(level=self.item_column)[
-                self.item_column],
-            user_features["age"], left_index=True, right_index=True
-        )[["age", self.item_column]].value_counts().groupby("age", group_keys=False).nlargest(self.max_K)
+        self.recommendations_per_age = interactions.lazy()\
+            .filter(pl.col(self.dt_column) > min_date)\
+            .join(user_features.lazy().filter(pl.col("age").is_not_null()), on="user_id", how="inner")\
+            .groupby(["age", self.item_column])\
+            .count()\
+            .sort(["age", "count"], descending=True)\
+            .groupby("age").head(n=self.max_K)\
+            .with_columns((pl.col("age").cumcount().over("age") + 1).alias("rank"))\
+            .collect()
+
         self._top_n.fit(interactions)
 
-    def predict(self, user_features: pd.DataFrame, N: int = 10):
-        missing_ages_mask = ~user_features["age"].isin(
-            self.recommendations.index.get_level_values("age"))
+    def predict(self, user_features: pl.DataFrame, N: int = 10):
+        assert self.recommendations_per_age is not None
 
-        uniq_users = user_features.index.unique(self.user_column)
+        user_features_query = user_features.lazy()
 
-        recs = pd.DataFrame(
-            data={self.item_column: [-1] * uniq_users.nunique()},
-            index=uniq_users
-        )
+        user_features_query = user_features_query.select(
+            pl.col(self.user_column),
+            pl.col("age")
+        )\
+            .join(self.recommendations_per_age.lazy(), on="age", how="left")
 
-        if missing_ages_mask.any():
-            rec_items = self._top_n.predict(user_features, N=N)\
-                .reset_index(self.item_column).groupby(self.user_column).apply(lambda x: x[self.item_column].to_list())
-            recs[self.item_column] = rec_items
+        recs_with_known_age = user_features_query.filter(pl.col("age").is_not_null())\
+            .sort([self.user_column, "age", "rank"])\
+            .groupby(self.user_column)\
+            .head(N)\
+            .select(
+                pl.col(self.user_column),
+                pl.col(self.item_column),
+                pl.col("rank")
+        )\
+            .collect()
 
-            del rec_items
+        users_with_unknown_ages = user_features_query.filter(pl.col("age").is_null())\
+            .select(pl.col(self.user_column).unique())\
+            .collect()
 
-        ages_mask = ~missing_ages_mask
+        recs_with_unknown_ages = self._top_n.predict(users_with_unknown_ages, N=N)
 
-        rec_items = self.recommendations.loc[(user_features[ages_mask]["age"], slice(None))].nlargest(
-            N).index.get_level_values(self.item_column).tolist()
+        need_to_fill = recs_with_known_age.groupby(self.user_column).count()\
+            .with_columns(
+                (N - pl.col("count")).alias("new_items")
+        )\
+            .filter(pl.col("new_items") > 0)
 
-        user_ids_with_features = user_features[ages_mask].index.get_level_values(self.user_column)
-        recs.loc[user_ids_with_features, self.item_column] = [
-            rec_items] * len(user_ids_with_features)
+        if not need_to_fill.is_empty():
+            num_to_predict = need_to_fill.select(pl.col("new_items").max())[0, 0]
 
-        recs = recs.explode(self.item_column)
-        recs["rank"] = recs.groupby(self.user_column).cumcount() + 1
+            add_recommends = self._top_n.predict(
+                need_to_fill.select(pl.col(self.user_column).unique()),
+                N=num_to_predict
+            )
 
-        return recs.reset_index().set_index([self.user_column, self.item_column])
+            add_recommends = add_recommends.join(
+                need_to_fill,
+                on=self.user_column,
+                how="inner"
+            ).with_columns(
+                (pl.col("rank") + pl.col("count")).alias("rank")
+            )
+
+            recs_with_known_age = recs_with_known_age.vstack(
+                add_recommends.select(
+                    pl.col(self.user_column),
+                    pl.col(self.item_column),
+                    pl.col("rank")
+                )
+            ).filter(pl.col("rank") <= N)
+
+        return recs_with_known_age.vstack(recs_with_unknown_ages)

@@ -1,25 +1,24 @@
 import numpy as np
 import pandas as pd
+import polars as pl
+
+from .metrics import USER_ID_COL, ITEM_ID_COL
 
 
 def load_users(path_to_file: str):
-    df_users = pd.read_csv(path_to_file, dtype={"age": "category"})
-    df_users["sex"] = df_users["sex"].astype(pd.SparseDtype(np.float32, np.nan))
-    df_users = df_users.set_index("user_id", verify_integrity=True)
-
+    df_users = pl.read_csv(path_to_file, dtypes={
+                           "age": pl.Categorical, "user_id": pl.UInt32, "sex": pl.Float32})
     return df_users
 
 
 def sample_true_rec_data():
-    df_true = pd.DataFrame({
+    df_true = pl.DataFrame({
         'user_id': ['Аня',                'Боря',               'Вася',         'Вася'],
         'item_id': ['Мастер и Маргарита', '451° по Фаренгейту', 'Зеленая миля', 'Рита Хейуорт и спасение из Шоушенка'],
     }
     )
 
-    df_true.set_index(["user_id", "item_id"], inplace=True)
-
-    df_recs = pd.DataFrame({
+    df_recs = pl.DataFrame({
         'user_id': [
             'Аня', 'Аня', 'Аня',
             'Боря', 'Боря', 'Боря',
@@ -37,37 +36,44 @@ def sample_true_rec_data():
         ]
     }
     )
-
-    df_recs.set_index(["user_id", "item_id"], inplace=True)
-
     return df_true, df_recs
 
 
 def load_interactions(path_to_file: str):
-    interactions = pd.read_csv(path_to_file, parse_dates=["start_date"])
-    duplicates = interactions.duplicated(subset=['user_id', 'item_id'], keep=False)
-    df_duplicates = interactions[duplicates].sort_values(by=['user_id', 'start_date'])
-    interactions = interactions[~duplicates]
+    interactions = pl.scan_csv(path_to_file,
+                               dtypes={
+                                   "user_id": pl.UInt32,
+                                   "item_id": pl.UInt32,
+                                   "start_date": pl.Date,
+                                   "rating": pl.Float32,
+                                   "progress": pl.UInt8
+                               }).with_columns(pl.col("rating").fill_null(float("nan")))
 
-    df_duplicates = df_duplicates.groupby(['user_id', 'item_id']).agg({
-        'progress': 'max',
-        'rating': 'max',
-        'start_date': 'min'
-    })
+    groups = interactions.groupby(["user_id", "item_id"], maintain_order=True).count()
 
-    interactions = pd.concat((interactions, df_duplicates.reset_index()), ignore_index=True)
-    interactions['progress'] = interactions['progress'].astype(np.int8)
-    interactions['rating'] = interactions['rating'].astype(pd.SparseDtype(np.float32, np.nan))
+    all_with_duplicates = interactions.join(groups, on=["user_id", "item_id"], how="inner")
 
-    interactions = interactions.set_index(["user_id", "item_id"], verify_integrity=True)
+    not_duplicated_interactions = all_with_duplicates.filter(
+        pl.col("count") <= 1).drop("count").collect()
 
-    return interactions
+    duplicated_interactions = all_with_duplicates.filter(pl.col("count") > 1).groupby(["user_id", "item_id"]).agg(
+        [
+            pl.max("progress"),
+            pl.max("rating"),
+            pl.min("start_date")
+        ]
+    ).collect()
+
+    return not_duplicated_interactions.vstack(duplicated_interactions)
 
 
 def load_items(path_to_file: str):
-    items = pd.read_csv(path_to_file, dtype={
-                        "genres": "category", "authors": "category", "year": "category"})
-
-    items = items.set_index("id", verify_integrity=True)
-    items.index = items.index.set_names("item_id")
-    return items
+    return pl.read_csv(
+        path_to_file,
+        dtypes={
+            "item_id": pl.UInt32,
+            "genres": pl.Categorical,
+            "authors": pl.Categorical,
+            "year": pl.Categorical
+        }
+    )

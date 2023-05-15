@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import pandas as pd
+import polars as pl
 
 
 class TimeRangeSplit:
@@ -134,8 +135,8 @@ class TimeRangeSplit:
         return max(0, len(date_range) - 1)
 
 
-def train_test_split(data: pd.DataFrame, dates: Tuple[pd.Timestamp, pd.Timestamp]):
-    train = data[data["start_date"] < dates[0]]
-    test = data[(data["start_date"] >= dates[0]) & (data["start_date"] < dates[1])]
+def train_test_split(data: pl.DataFrame, dates: Tuple[pl.Date, pl.Date]):
+    train = data.filter(pl.col("start_date") < dates[0])
+    test = data.filter((pl.col("start_date") >= dates[0]) & (pl.col("start_date") < dates[1]))
 
     return train, test
