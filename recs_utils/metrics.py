@@ -11,34 +11,34 @@ USER_ID_COL = "user_id"
 ITEM_ID_COL = "item_id"
 
 
-def model_cross_validate(interactions: pd.DataFrame, item_features: pd.DataFrame, user_features: pd.DataFrame, folds, model_factory: Callable[[], ModelRecommender], n: int):
+def model_cross_validate(interactions: pl.DataFrame, item_features: pl.DataFrame, user_features: pl.DataFrame, folds, model_factory: Callable[[], ModelRecommender], n: int):
     validation_results = []
 
     for num_fold, (train_idx, test_idx, info) in enumerate(tqdm(folds), 1):
-        train: pd.DataFrame = interactions.loc[train_idx]
-        test: pd.DataFrame = interactions.loc[test_idx]
-        train_item_features: pd.DataFrame = item_features[item_features.index.isin(
-            train.index.get_level_values("item_id").unique())]
-        train_user_features: pd.DataFrame = user_features[user_features.index.isin(
-            train.index.get_level_values("user_id").unique())]
+        train = interactions.join(train_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
+        test = interactions.join(test_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
+        train_item_features = item_features.filter(pl.col(ITEM_ID_COL).is_in(
+            train.select(pl.col(ITEM_ID_COL).unique()).to_series()))
+        train_user_features = user_features.filter(pl.col(USER_ID_COL).is_in(
+            train.select(pl.col(USER_ID_COL).unique()).to_series()))
 
         model: ModelRecommender = model_factory()
         model.fit(train, progress=False, train_item_features=train_item_features,
                   train_user_features=train_user_features)
-        pred_recs = model.recommend(test.index.get_level_values("user_id").unique().to_numpy(), n)
+        pred_recs: pl.DataFrame = model.recommend(test.select(pl.col(USER_ID_COL).unique()).to_series(), n)
 
         metrics = compute_metrics(test, pred_recs, n)
-        metrics = metrics.reset_index(names=["metric_name"])
-        metrics["model"] = model.model_name()
-        metrics["start_date"] = info["Start date"]
-        metrics["end_date"] = info["End date"]
-        metrics["fold"] = num_fold
+        metrics = metrics.with_columns(
+            pl.lit(model.model_name()).alias("model"),
+            pl.lit(info["Start date"]).alias("start_date"),
+            pl.lit(info["End date"]).alias("end_date"),
+            pl.lit(num_fold).alias("fold")
+        )
         validation_results.append(metrics)
 
-    cv_results = pd.concat(validation_results)
-    cv_results["model"] = cv_results["model"].astype("category")
-
-    return cv_results.sort_values("start_date"), model
+    cv_results: pl.DataFrame = pl.concat(validation_results)
+    cv_results = cv_results.with_columns(pl.col("model").cast(pl.Categorical).alias("model"))
+    return cv_results.sort("start_date"), model
 
 
 def join_true_pred_and_preprocess(true_pred: pl.DataFrame, recommendations: pl.DataFrame):
@@ -52,24 +52,26 @@ def join_true_pred_and_preprocess(true_pred: pl.DataFrame, recommendations: pl.D
     return data.collect()
 
 
-def compute_metrics(true_pred: pd.DataFrame, recs: pd.DataFrame, max_k: int):
+def compute_metrics(true_pred: pl.DataFrame, recs: pl.DataFrame, max_k: int):
     joined_data = join_true_pred_and_preprocess(true_pred, recs)
 
     metrics = defaultdict(list)
 
     for k in range(1, max_k + 1, 1):
         metrics["name"].append(f"prec@{k}")
-        metrics["value"].append(precision_at_k(joined_data, k))
+        value, joined_data = precision_at_k(joined_data, k)
+        metrics["value"].append(value)
 
         metrics["name"].append(f"recall@{k}")
-        metrics["value"].append(recall_at_k(joined_data, k))
+        value, joined_data = precision_at_k(joined_data, k)
+        metrics["value"].append(value)
 
     metrics["name"].append("MRR")
     metrics["value"].append(mean_reciprocal_rank(joined_data))
     metrics["name"].append("MAP")
     metrics["value"].append(mean_average_prec(joined_data))
 
-    return pd.DataFrame.from_dict(metrics).set_index("name")
+    return pl.from_dict(metrics)
 
 
 def compute_hit_at_k(joined_data: pl.DataFrame, k: int):

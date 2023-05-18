@@ -40,7 +40,7 @@ def sample_true_rec_data():
 
 
 def load_interactions(path_to_file: str):
-    interactions = pl.scan_csv(path_to_file,
+    interactions = pl.read_csv(path_to_file,
                                dtypes={
                                    "user_id": pl.UInt32,
                                    "item_id": pl.UInt32,
@@ -49,20 +49,19 @@ def load_interactions(path_to_file: str):
                                    "progress": pl.UInt8
                                }).with_columns(pl.col("rating").fill_null(float("nan")))
 
-    groups = interactions.groupby(["user_id", "item_id"], maintain_order=True).count()
+    uniq_items = interactions.select(
+        pl.col("user_id"),
+        pl.col("item_id")
+    )
 
-    all_with_duplicates = interactions.join(groups, on=["user_id", "item_id"], how="inner")
-
-    not_duplicated_interactions = all_with_duplicates.filter(
-        pl.col("count") <= 1).drop("count").collect()
-
-    duplicated_interactions = all_with_duplicates.filter(pl.col("count") > 1).groupby(["user_id", "item_id"]).agg(
+    not_duplicated_interactions = interactions.filter(uniq_items.is_unique())
+    duplicated_interactions = interactions.filter(uniq_items.is_duplicated()).groupby(["user_id", "item_id"]).agg(
         [
             pl.max("progress"),
             pl.max("rating"),
             pl.min("start_date")
         ]
-    ).collect()
+    )
 
     return not_duplicated_interactions.vstack(duplicated_interactions)
 
@@ -71,9 +70,10 @@ def load_items(path_to_file: str):
     return pl.read_csv(
         path_to_file,
         dtypes={
-            "item_id": pl.UInt32,
+            "id": pl.UInt32,
             "genres": pl.Categorical,
             "authors": pl.Categorical,
             "year": pl.Categorical
-        }
+        },
+        new_columns=["item_id"]
     )
