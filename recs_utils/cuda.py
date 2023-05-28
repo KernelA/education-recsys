@@ -54,8 +54,8 @@ typedef struct  {
 
 __device__ void kahan_add(KahanSum * sum_state, rating_inter_type new_value)
 {
-   double y = new_value - sum_state->correction;
-   double t = sum_state->sum + y;
+   rating_inter_type y = new_value - sum_state->correction;
+   rating_inter_type t = sum_state->sum + y;
    sum_state->correction = (t - sum_state->sum) - y;
    sum_state->sum = t;
 }
