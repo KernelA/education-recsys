@@ -16,10 +16,9 @@ class ListWiseTestRankingInfo(NamedTuple):
     features: FeaturesData
 
 
-def add_features(interaction: pl.DataFrame, item_features: pl.DataFrame, user_features: pl.DataFrame):
+def add_features(interaction: pl.DataFrame, features: pl.DataFrame, join_cols: Sequence[str]):
     return interaction.lazy()\
-        .join(user_features.lazy(), on="user_id", how="inner")\
-        .join(item_features.lazy(), on="item_id", how="inner",).collect()
+        .join(features.lazy(), on=join_cols, how="inner").collect()
 
 
 def add_group_ids(interactions_with_features: pl.DataFrame, group_by: Sequence[str], group_id_col_name: str = "group_id"):
