@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import polars as pl
 
@@ -97,7 +97,54 @@ class MTSDataset:
         return pl.read_csv(path_to_data, dtypes={
             "age": pl.Categorical,
             USER_ID_COL: pl.UInt32,
-            "sex": pl.Float32})
+            "sex": pl.Float32}).with_columns(
+                pl.col("sex").cast(pl.Int8)
+        )
+
+    @staticmethod
+    def select_genres(items: pl.DataFrame, cov: float, null_value: Optional[str] = None):
+        """Select genres which covers at most 'cov' examples
+        """
+        assert 0.0 <= cov <= 1.0, "'cov' must be in range [0; 1]"
+
+        items = items.with_columns(
+            pl.col("title").str.strip().str.to_lowercase().alias("title"),
+            pl.col("genres").cast(str).str.strip().str.to_lowercase().str.split(
+                ",").arr.sort().arr.join(",").alias("genres")
+        )
+
+        genres = items.lazy()\
+            .filter(pl.col("genres").is_not_null())\
+            .select(pl.col("genres").str.split(","))\
+            .explode("genres")\
+            .groupby("genres")\
+            .count()\
+            .sort("count", descending=True)\
+            .with_columns((pl.col("count") / pl.col("count").sum()).alias("cum_fraction").cumsum())\
+            .select(pl.all().exclude("count"))\
+            .with_columns((pl.col("genres").cumcount() + 1).alias("num_genres")).collect()
+
+        selected_genres = set(genres.filter(pl.col("cum_fraction") <= cov).select(
+            pl.col("genres")).to_series().to_list())
+
+        items = items.with_columns(
+            pl.col("genres").str.split(",").apply(lambda x: MTSDataset.exclude_genres(
+                x, selected_genres)).alias("genres")
+        )
+
+        if null_value is not None:
+            items = items.with_columns(pl.col("genres").fill_null(null_value))
+
+        return items
+
+    @staticmethod
+    def exclude_genres(genres, selected_genres):
+        res = ",".join(sorted(set(genres).intersection(selected_genres)))
+
+        if res:
+            return res
+
+        return None
 
 
 def sample_true_rec_data():

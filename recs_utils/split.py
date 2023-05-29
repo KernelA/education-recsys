@@ -51,8 +51,6 @@ class TimeRangeSplit:
     def _set_diff(self, left: pl.DataFrame, right: pl.DataFrame, col_names: Union[str, Sequence[str]]):
         """Same as np.setdiff1d left join + filtering
         """
-        fake_key_col = "fake_key"
-
         # Join with empty right may lead to error
         if len(right) == 0:
             return left.lazy().select(pl.col(col_names)).unique()
@@ -61,17 +59,10 @@ class TimeRangeSplit:
             .join(
                 right.lazy().select(
                     pl.col(col_names)
-                ).unique()
-                .with_columns(
-                    pl.lit(1).alias(fake_key_col)
-                ),
-                how="left",
+                ).unique(),
+                how="anti",
                 on=col_names
-        )\
-            .filter(
-            pl.col(fake_key_col).is_null()
-        )\
-            .select(pl.col(col_names).unique())
+        ).select(pl.col(col_names).unique())
 
     def _filter_cold_entities(self,
                               train_index: pl.DataFrame,
