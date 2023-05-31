@@ -40,7 +40,7 @@ def convert_to_features_data(interactions_with_features: pl.DataFrame, exclude_c
                           (col_dtype.is_(pl.Categorical) or col_dtype.is_(pl.Utf8)) and col not in exclude_columns]
 
     num_features_names = [col for col, col_dtype in interactions_with_features.schema.items() if col_dtype
-                          in pl.NUMERIC_DTYPES and col not in cat_features_names and col not in cat_features_names]
+                          in pl.NUMERIC_DTYPES and col not in cat_features_names and col not in exclude_columns]
 
     num_features = None
 
