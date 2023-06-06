@@ -12,4 +12,5 @@ seaborn~=0.12.2
 lightfm~=1.17.0
 catboost~=1.2.0
 numba~=0.57.0
+python-dotenv~=1.0.0
 polars[pandas,numpy,timezone,pyarrow]~=0.17.14

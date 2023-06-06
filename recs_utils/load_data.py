@@ -8,39 +8,122 @@ from .metrics import USER_ID_COL, ITEM_ID_COL
 class MovieLens100K:
     """https://www.kaggle.com/datasets/prajitdatta/movielens-100k-dataset
     """
+    RELEASE_DATE_COL = "release_date"
+    VIDEO_RELEASE_DATE = "video_release_date"
 
-    ITEM_COLUMNS = [
-        ITEM_ID_COL, 'title', 'release date', 'video release date',
-        'IMDb URL ', 'unknown', 'Action', 'Adventure', 'Animation',
-        "Children's", 'Comedy', 'Crime', 'Documentary', 'Drama', 'Fantasy',
-        'Film-Noir', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-Fi',
-        'Thriller', 'War', 'Western',
+    GENRES_COLUMNS = [
+        'unknown',
+        'Action',
+        'Adventure',
+        'Animation',
+        "Children's",
+        'Comedy',
+        'Crime',
+        'Documentary',
+        'Drama',
+        'Fantasy',
+        'Film-Noir',
+        'Horror',
+        'Musical',
+        'Mystery',
+        'Romance',
+        'Sci-Fi',
+        'Thriller',
+        'War',
+        'Western',
     ]
 
-    @staticmethod
-    def load_items(path_to_data: str, item_columns: List[str] = [ITEM_ID_COL, "title"]):
-        column_indices = [MovieLens100K.ITEM_COLUMNS.index(col) for col in item_columns]
+    COL_DTYPES = {
+        ITEM_ID_COL: pl.UInt32,
+        'title': pl.Utf8,
+        RELEASE_DATE_COL: pl.Utf8,
+        VIDEO_RELEASE_DATE: pl.Utf8,
+        'IMDb_URL': pl.Utf8,
+        'unknown': pl.Int8,
+        'Action': pl.Int8,
+        'Adventure': pl.Int8,
+        'Animation': pl.Int8,
+        "Children's": pl.Int8,
+        'Comedy': pl.Int8,
+        'Crime': pl.Int8,
+        'Documentary': pl.Int8,
+        'Drama': pl.Int8,
+        'Fantasy': pl.Int8,
+        'Film-Noir': pl.Int8,
+        'Horror': pl.Int8,
+        'Musical': pl.Int8,
+        'Mystery': pl.Int8,
+        'Romance': pl.Int8,
+        'Sci-Fi': pl.Int8,
+        'Thriller': pl.Int8,
+        'War': pl.Int8,
+        'Western': pl.Int8,
+    }
 
-        return pl.read_csv(
+    @staticmethod
+    def load_items(path_to_data: str, item_columns: Optional[List[str]] = [ITEM_ID_COL, "title"]):
+        if item_columns is None:
+            item_columns = list(MovieLens100K.COL_DTYPES.keys())
+            column_indices = None
+            dtypes = MovieLens100K.COL_DTYPES
+        else:
+            all_cols = list(MovieLens100K.COL_DTYPES.keys())
+            column_indices = [all_cols.index(col) for col in item_columns]
+            dtypes = {col: MovieLens100K.COL_DTYPES[col] for col in item_columns}
+
+        data = pl.read_csv(
             path_to_data,
             separator='|',
             has_header=False,
             encoding="latin-1",
-            dtypes={ITEM_ID_COL: pl.UInt32},
+            dtypes=dtypes,
             columns=column_indices,
             new_columns=item_columns
         )
 
-    @staticmethod
+        if MovieLens100K.VIDEO_RELEASE_DATE in data.columns:
+            data = data.drop(MovieLens100K.VIDEO_RELEASE_DATE)
+
+        actual_genres = [col for col in MovieLens100K.GENRES_COLUMNS if col in data.columns]
+
+        data = data.with_columns(
+            pl.concat_list(actual_genres).apply(lambda x: ",".join(
+                sorted(actual_genres[pos].lower() for pos, value in enumerate(x) if value == 1))).alias("genres").cast(pl.Categorical)
+        )
+        data = data.drop(actual_genres)
+
+        if MovieLens100K.RELEASE_DATE_COL in data.columns:
+            data = data.with_columns(
+                pl.col(MovieLens100K.RELEASE_DATE_COL).str.strptime(pl.Date, "%d-%b-%Y"))
+
+        return data
+
+    @ staticmethod
+    def load_users(path_to_data: str):
+        return pl.read_csv(
+            path_to_data,
+            separator="|",
+            has_header=False,
+            encoding="utf-8",
+            new_columns=[USER_ID_COL, "age", "gender", "occupation", "zip_code"],
+            dtypes={USER_ID_COL: pl.UInt32, "age": pl.Int16, "gender": pl.Categorical,
+                    "occupation": pl.Categorical, "zip_code": pl.Categorical}
+        )
+
+    @ staticmethod
     def load_interactions(path_to_data: str, sort: bool = True):
         ratings = pl.read_csv(
             path_to_data,
             separator='\t',
             has_header=False,
-            columns=[0, 1, 2],
-            new_columns=[USER_ID_COL, ITEM_ID_COL, "rating"],
-            dtypes=[pl.UInt32, pl.UInt32, pl.Float32]
+            new_columns=[USER_ID_COL, ITEM_ID_COL, "rating", "timestamp"],
+            dtypes=[pl.UInt32, pl.UInt32, pl.Float32, pl.Int32]
         )
+
+        ratings = ratings.with_columns(pl.from_epoch(
+            pl.col("timestamp"), time_unit="s").dt.date().alias("start_date"))
+
+        ratings = ratings.drop("timestamp")
 
         if sort:
             ratings = ratings.sort([USER_ID_COL, ITEM_ID_COL])
@@ -52,7 +135,7 @@ class MTSDataset:
     """https://www.kaggle.com/datasets/sharthz23/mts-library
     """
 
-    @staticmethod
+    @ staticmethod
     def load_interactions(path_to_data: str):
         interactions = pl.read_csv(path_to_data,
                                    dtypes={
@@ -79,7 +162,7 @@ class MTSDataset:
 
         return not_duplicated_interactions.vstack(duplicated_interactions)
 
-    @staticmethod
+    @ staticmethod
     def load_items(path_to_data: str):
         return pl.read_csv(
             path_to_data,
@@ -92,7 +175,7 @@ class MTSDataset:
             new_columns=[ITEM_ID_COL]
         )
 
-    @staticmethod
+    @ staticmethod
     def load_users(path_to_data: str):
         return pl.read_csv(path_to_data, dtypes={
             "age": pl.Categorical,
@@ -101,7 +184,7 @@ class MTSDataset:
                 pl.col("sex").cast(pl.Int8)
         )
 
-    @staticmethod
+    @ staticmethod
     def select_genres(items: pl.DataFrame, cov: float, null_value: Optional[str] = None):
         """Select genres which covers at most 'cov' examples
         """
@@ -128,7 +211,7 @@ class MTSDataset:
             pl.col("genres")).to_series().to_list())
 
         items = items.with_columns(
-            pl.col("genres").str.split(",").apply(lambda x: MTSDataset.exclude_genres(
+            pl.col("genres").str.split(",").apply(lambda x: MTSDataset._exclude_genres(
                 x, selected_genres)).alias("genres")
         )
 
@@ -137,8 +220,8 @@ class MTSDataset:
 
         return items
 
-    @staticmethod
-    def exclude_genres(genres, selected_genres):
+    @ staticmethod
+    def _exclude_genres(genres, selected_genres):
         res = ",".join(sorted(set(genres).intersection(selected_genres)))
 
         if res:

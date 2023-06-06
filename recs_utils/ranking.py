@@ -12,6 +12,14 @@ class ListwiseTrainRankingInfo(NamedTuple):
     features: FeaturesData
 
 
+class PairWiseRankingInfo(NamedTuple):
+    target: np.ndarray
+    pairs: np.ndarray
+    group_ids: np.ndarray
+    timestamps: np.ndarray
+    features: FeaturesData
+
+
 class ListWiseTestRankingInfo(NamedTuple):
     features: FeaturesData
 
@@ -58,6 +66,25 @@ def convert_to_features_data(interactions_with_features: pl.DataFrame, exclude_c
         cat_feature_data=cat_features,
         num_feature_names=num_features_names if num_features_names else None,
         cat_feature_names=cat_features_names if cat_features_names else None)
+
+
+def features_target_pairwise_ranking(interactions_with_features: pl.DataFrame, target_col: str = "target", time_col: str = "start_date", user_id_col: str = "user_id", pair_id_col: str = "pair_id", item_id_col: str = "item_id", group_id_col: str = "group_id") -> PairWiseRankingInfo:
+    interactions_with_features = interactions_with_features.sort(group_id_col)
+    pairs_indices = interactions_with_features.lazy().with_row_count().select(
+        pl.col("row_nr"),
+        pl.col(target_col),
+        pl.col(pair_id_col)
+    ).sort(pair_id_col, target_col, descending=[False, True]).select(pl.col("row_nr")).collect().to_numpy().reshape(-1, 2)
+
+    target = interactions_with_features.select(
+        pl.col(target_col)).to_series().to_numpy().astype(np.float32)
+    timestamps = interactions_with_features.select(pl.col(time_col)).to_series().to_numpy()
+    group_ids = interactions_with_features.select(pl.col(group_id_col)).to_series().to_numpy()
+
+    interactions_with_features = interactions_with_features.drop(
+        [target_col, group_id_col, pair_id_col, user_id_col, item_id_col, time_col])
+
+    return PairWiseRankingInfo(target, pairs_indices, group_ids, timestamps, convert_to_features_data(interactions_with_features))
 
 
 def features_target_ranking(interactions_with_features: pl.DataFrame, target_col: str = "target", group_id_col: str = "group_id", time_col: str = "start_date", user_id_col: str = "user_id", item_id_col: str = "item_id") -> ListwiseTrainRankingInfo:

@@ -34,18 +34,19 @@ class ModelRecommender(ABC):
 
 
 class ImplicitRecommender(ModelRecommender):
-    def __init__(self, model: RecommenderBase, user_mapping, item_mapping, inv_item_mapping):
+    def __init__(self, model: RecommenderBase, user_mapping, item_mapping, inv_item_mapping, rating_col_name: Optional[str] = None):
         super().__init__(user_mapping, item_mapping, inv_item_mapping)
         self.model = model
         self._train_matrix = None
         self._schema = None
+        self._rating_col_name = rating_col_name
 
     def model_name(self):
         return self.model.__class__.__name__
 
     def fit(self, interactions: pl.DataFrame, progress: bool = True, train_user_features=None, train_item_features=None):
         self._train_matrix = interactions_to_csr_matrix(
-            interactions, self.user_mapping, self.item_mapping)
+            interactions, self.user_mapping, self.item_mapping, weight_col=self._rating_col_name)
         self._schema = interactions.schema
         self.model.fit(self._train_matrix, show_progress=progress)
 
