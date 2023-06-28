@@ -1,4 +1,6 @@
 pyyaml
+dvc~=3.0
+kaggle~=1.5.13
 pandas[performance]~=2.0.1
 more_itertools
 numpy~=1.20
