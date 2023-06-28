@@ -140,4 +140,5 @@ cython_debug/
 .vscode/
 /data
 /catboost_info
+/catboost-dir
 *.cbm
