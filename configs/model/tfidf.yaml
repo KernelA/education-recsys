@@ -1,0 +1,5 @@
+defaults:
+  - inner_implicit_model@inner_model: tfidf
+  - _self_
+
+_target_: recs_utils.implicit_model.ImplicitRecommender

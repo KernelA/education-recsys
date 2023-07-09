@@ -1,0 +1,6 @@
+num_periods: 7
+dt_column: 'start_date'
+num_recs: 10
+period:
+  _target_: 'datetime.timedelta'
+  days: 1

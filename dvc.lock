@@ -11,10 +11,14 @@ stages:
   dump_data:
     cmd: python ./dump_data.py
     deps:
+    - path: ./configs/data/mts_lib.yaml
+      hash: md5
+      md5: 7ed4d275db1a068f1ae81ff88bc10030
+      size: 182
     - path: ./configs/dump.yaml
       hash: md5
-      md5: 7ef18e7af34dd39c5ef0a69498592901
-      size: 221
+      md5: c3ec0b2f93835f1617f69904b352495a
+      size: 74
     - path: ./data/mts/raw
       hash: md5
       md5: 4d3e0c84d99939f3a83b187da647fe33.dir
@@ -22,8 +26,8 @@ stages:
       nfiles: 3
     - path: ./dump_data.py
       hash: md5
-      md5: fbd3e69f76b9ffe36f58f50b760278d5
-      size: 871
+      md5: 9e0a98df62d3a82ca5121fec825dc5f1
+      size: 912
     outs:
     - path: ./data/mts/dump/interactions.parquet
       hash: md5
@@ -31,34 +35,43 @@ stages:
       size: 11186434
     - path: ./data/mts/dump/items.parquet
       hash: md5
-      md5: fd91f17f3c6ac550bfa4a3d6b6066a0f
-      size: 1884475
+      md5: c25fc8bb20a8083aaae4271d112556e8
+      size: 1883791
     - path: ./data/mts/dump/users.parquet
       hash: md5
       md5: 0c0525030480b8ccc30ac4fb55c60879
       size: 524265
   cross_val:
-    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop,bm25,cosine,tfidf
     deps:
+    - path: ./configs/cross_val.yaml
+      hash: md5
+      md5: d85fc95951b87feefc7e635c5eb86591
+      size: 327
+    - path: ./configs/model/inner_implicit_model
+      hash: md5
+      md5: d0fedaed71c19ae2218048eaa155e077.dir
+      size: 183
+      nfiles: 3
     - path: ./data/mts/dump/interactions.parquet
       hash: md5
       md5: 234b9ef93d3592e00bfe1bc6b368fad7
       size: 11186434
     - path: ./data/mts/dump/items.parquet
       hash: md5
-      md5: fd91f17f3c6ac550bfa4a3d6b6066a0f
-      size: 1884475
+      md5: c25fc8bb20a8083aaae4271d112556e8
+      size: 1883791
     - path: ./data/mts/dump/users.parquet
       hash: md5
       md5: 0c0525030480b8ccc30ac4fb55c60879
       size: 524265
     - path: ./train_recommender.py
       hash: md5
-      md5: 605d8971ec9c63a37c5a531bc0657510
-      size: 1775
+      md5: 3c968c90a07e36d9e500488404eaac9e
+      size: 1784
     outs:
     - path: ./exp/multirun
       hash: md5
-      md5: 792b19a857f07ea5f20773548a6aadc8.dir
-      size: 33690
-      nfiles: 13
+      md5: 46b0fba6fa8b008583153557fd832aed.dir
+      size: 79014
+      nfiles: 31

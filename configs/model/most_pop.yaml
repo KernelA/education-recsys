@@ -1,6 +1,3 @@
 _target_: recs_utils.simple_rec.PopularRecommender
 max_K: 100
 days: 30
-user_col: "user_id"
-item_column: "item_id"
-dt_column: "start_date"

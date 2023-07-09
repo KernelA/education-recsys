@@ -17,7 +17,6 @@ class BaseRecommender(ABC):
     def model_name(self):
         pass
 
-
     @abstractmethod
     def fit(self,
             user_item_interactions: pl.DataFrame,
@@ -36,7 +35,7 @@ class BaseRecommender(ABC):
         raise NotImplementedError()
 
 
-class BaseWithItemSim(BaseRecommender):
+class BaseItemSim(BaseRecommender):
     @abstractmethod
     def most_similar_items(self, item_ids: pl.Series, n_neighbours: int):
         raise NotImplementedError()

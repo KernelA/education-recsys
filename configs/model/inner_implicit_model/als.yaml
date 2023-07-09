@@ -1,0 +1,6 @@
+_target_: implicit.als.AlternatingLeastSquares
+factors: 16
+regularization: 100
+alpha: 1.0
+iterations: 10
+random_state: 1921239

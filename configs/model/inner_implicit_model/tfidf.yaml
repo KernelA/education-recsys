@@ -1,0 +1,2 @@
+_target_: implicit.nearest_neighbours.TFIDFRecommender
+K: 10
