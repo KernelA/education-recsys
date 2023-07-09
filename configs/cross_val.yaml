@@ -1,0 +1,25 @@
+hydra:
+  run:
+    dir: ./exp/single
+  sweep:
+    dir: ./exp/multirun
+    subdir: ${hydra.job.num}_${hydra.job.override_dirname}
+  job:
+    chdir: true
+
+defaults:
+  - model: most_pop
+  - _self_
+
+cv:
+  num_periods: 7
+  num_recs: 10
+  period:
+    _target_: datetime.timedelta
+    days: 1
+
+dump_files:
+  # do not use hydra interpolation because DVC require explicit paths
+  interactions_path: ./data/mts/dump/interactions.parquet
+  users_path: ./data/mts/dump/users.parquet
+  items_path: ./data/mts/dump/items.parquet

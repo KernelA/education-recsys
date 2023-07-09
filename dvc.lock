@@ -1,0 +1,64 @@
+schema: '2.0'
+stages:
+  download_data:
+    cmd: kaggle datasets download -d sharthz23/mts-library --unzip -p ./data/mts/raw
+    outs:
+    - path: ./data/mts/raw
+      hash: md5
+      md5: 4d3e0c84d99939f3a83b187da647fe33.dir
+      size: 56317184
+      nfiles: 3
+  dump_data:
+    cmd: python ./dump_data.py
+    deps:
+    - path: ./configs/dump.yaml
+      hash: md5
+      md5: 7ef18e7af34dd39c5ef0a69498592901
+      size: 221
+    - path: ./data/mts/raw
+      hash: md5
+      md5: 4d3e0c84d99939f3a83b187da647fe33.dir
+      size: 56317184
+      nfiles: 3
+    - path: ./dump_data.py
+      hash: md5
+      md5: fbd3e69f76b9ffe36f58f50b760278d5
+      size: 871
+    outs:
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: fd91f17f3c6ac550bfa4a3d6b6066a0f
+      size: 1884475
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+  cross_val:
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop
+    deps:
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: fd91f17f3c6ac550bfa4a3d6b6066a0f
+      size: 1884475
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: 605d8971ec9c63a37c5a531bc0657510
+      size: 1775
+    outs:
+    - path: ./exp/multirun
+      hash: md5
+      md5: 792b19a857f07ea5f20773548a6aadc8.dir
+      size: 33690
+      nfiles: 13

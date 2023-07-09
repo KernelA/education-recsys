@@ -1,0 +1,12 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+
+raw_dir: ./data/mts/raw
+
+dump_files:
+  interactions: ./data/mts/dump/interactions.parquet
+  users: ./data/mts/dump/users.parquet
+  items_path: ./data/mts/dump/items.parquet

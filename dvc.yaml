@@ -1,0 +1,35 @@
+stages:
+  download_data:
+    vars:
+      - ./configs/dump.yaml:raw_dir
+    cmd: kaggle datasets download -d sharthz23/mts-library --unzip -p ${raw_dir}
+    outs:
+      - ${raw_dir}
+    
+  dump_data:
+    vars:
+      - ./configs/dump.yaml
+    cmd: python ./dump_data.py 
+    deps:
+      - ./dump_data.py
+      - ./configs/dump.yaml
+      - ${raw_dir}
+    outs:
+      - ${dump_files.interactions}
+      - ${dump_files.users}
+      - ${dump_files.items_path}
+
+  cross_val:
+    vars:
+     - ./configs/cross_val.yaml
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop
+    deps:
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${hydra.sweep.dir}
+
+
+  
