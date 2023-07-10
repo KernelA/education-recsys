@@ -24,7 +24,7 @@ stages:
     vars:
       - ./configs/data/mts_lib.yaml
       - ./configs/cross_val.yaml
-    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop,bm25,cosine,tfidf
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop,bm25,cosine,tfidf,als
     deps:
       - ./configs/model/inner_implicit_model
       - ./configs/cross_val.yaml
