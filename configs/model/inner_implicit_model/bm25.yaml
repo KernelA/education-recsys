@@ -1,2 +1,0 @@
-_target_: implicit.nearest_neighbours.BM25Recommender
-K: 10

@@ -1,5 +1,4 @@
-defaults:
-  - inner_implicit_model@inner_model: bm25
-  - _self_
-
 _target_: recs_utils.implicit_model.ImplicitRecommender
+inner_model: 
+  _target_: implicit.nearest_neighbours.BM25Recommender
+  K: 10
