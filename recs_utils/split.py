@@ -1,9 +1,7 @@
 from typing import Tuple, Optional, Sequence, Union
 import datetime
 
-import pandas as pd
 import polars as pl
-import numpy as np
 
 
 class TimeRangeSplit:

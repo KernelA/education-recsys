@@ -1,8 +1,11 @@
-from typing import List, Optional
+from typing import List, Optional, Union
+import pathlib
 
 import polars as pl
 
 from .metrics import USER_ID_COL, ITEM_ID_COL
+
+PathType = Union[str, pathlib.Path]
 
 
 class MovieLens100K:
@@ -136,7 +139,7 @@ class MTSDataset:
     """
 
     @ staticmethod
-    def load_interactions(path_to_data: str):
+    def load_interactions(path_to_data: PathType):
         interactions = pl.read_csv(path_to_data,
                                    dtypes={
                                        USER_ID_COL: pl.UInt32,
@@ -163,7 +166,7 @@ class MTSDataset:
         return not_duplicated_interactions.vstack(duplicated_interactions)
 
     @ staticmethod
-    def load_items(path_to_data: str):
+    def load_items(path_to_data: PathType):
         return pl.read_csv(
             path_to_data,
             dtypes={
@@ -176,7 +179,7 @@ class MTSDataset:
         )
 
     @ staticmethod
-    def load_users(path_to_data: str):
+    def load_users(path_to_data: PathType):
         return pl.read_csv(path_to_data, dtypes={
             "age": pl.Categorical,
             USER_ID_COL: pl.UInt32,

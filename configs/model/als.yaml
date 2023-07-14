@@ -1,0 +1,8 @@
+_target_: recs_utils.implicit_model.ImplicitRecommender
+inner_model:
+  _target_: implicit.als.AlternatingLeastSquares
+  factors: 64
+  regularization: 0.5
+  alpha: 1.0
+  iterations: 10
+  random_state: 1921239

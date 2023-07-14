@@ -1,0 +1,127 @@
+schema: '2.0'
+stages:
+  download_data:
+    cmd: kaggle datasets download -d sharthz23/mts-library --unzip -p ./data/mts/raw
+    outs:
+    - path: ./data/mts/raw
+      hash: md5
+      md5: 4d3e0c84d99939f3a83b187da647fe33.dir
+      size: 56317184
+      nfiles: 3
+  dump_data:
+    cmd: python ./dump_data.py
+    deps:
+    - path: ./configs/data/mts_lib.yaml
+      hash: md5
+      md5: 7ed4d275db1a068f1ae81ff88bc10030
+      size: 182
+    - path: ./configs/dump.yaml
+      hash: md5
+      md5: 4e907fd2b255e19bc502d22b19c16cf4
+      size: 84
+    - path: ./data/mts/raw
+      hash: md5
+      md5: 4d3e0c84d99939f3a83b187da647fe33.dir
+      size: 56317184
+      nfiles: 3
+    - path: ./dump_data.py
+      hash: md5
+      md5: dc4eb55e44a8f5a28975573bba46797a
+      size: 911
+    outs:
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 28c97e5a522986083efb3cf0adc006ba
+      size: 1883718
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+  cross_val:
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop,bm25,cosine,tfidf,als
+    deps:
+    - path: ./configs/cross_val.yaml
+      hash: md5
+      md5: c7d22cf25efc01a46a73f6bfeb0bc3d7
+      size: 223
+    - path: ./configs/model/inner_implicit_model
+      hash: md5
+      md5: a65aa1f9506e531600357794a63dbbc1.dir
+      size: 309
+      nfiles: 4
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 28c97e5a522986083efb3cf0adc006ba
+      size: 1883718
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: d399b93afdd633508d349bdc69472e7e
+      size: 1787
+    outs:
+    - path: ./exp/multirun
+      hash: md5
+      md5: 3c8d5628260204a1e14b169d10e70945.dir
+      size: 95421
+      nfiles: 37
+  cross_validate_fast_algorithms:
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop,bm25,cosine,tfidf
+      hydra.sweep.dir=./exp/cross_val_fast
+    deps:
+    - path: ./configs/cross_val.yaml
+      hash: md5
+      md5: c7d22cf25efc01a46a73f6bfeb0bc3d7
+      size: 223
+    - path: ./configs/model/bm25.yaml
+      hash: md5
+      md5: 6c2e1569c426b641620c2ef503e9be00
+      size: 134
+    - path: ./configs/model/cosine.yaml
+      hash: md5
+      md5: 6148b338bbd32f95640d4b5ca08268ac
+      size: 137
+    - path: ./configs/model/most_pop.yaml
+      hash: md5
+      md5: a7e696d354e8e373ba98256c66d0f251
+      size: 70
+    - path: ./configs/model/most_pop_per_age.yaml
+      hash: md5
+      md5: 541577b37fe15fea7e573c71f6116f46
+      size: 76
+    - path: ./configs/model/tfidf.yaml
+      hash: md5
+      md5: b7239c645418dd95c9a9b65e573799de
+      size: 134
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 28c97e5a522986083efb3cf0adc006ba
+      size: 1883718
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: d399b93afdd633508d349bdc69472e7e
+      size: 1787
+    outs:
+    - path: ./exp/cross_val_fast
+      hash: md5
+      md5: b9074615bc05f92a774f4aa797e7aaf7.dir
+      size: 79265
+      nfiles: 31

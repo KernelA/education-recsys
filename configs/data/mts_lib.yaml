@@ -1,0 +1,6 @@
+raw_dir: ./data/mts/raw
+
+dump_files:
+  interactions_path: ./data/mts/dump/interactions.parquet
+  users_path: ./data/mts/dump/users.parquet
+  items_path: ./data/mts/dump/items.parquet

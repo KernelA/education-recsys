@@ -1,0 +1,3 @@
+_target_: recs_utils.simple_rec.PopularRecommender
+max_K: 100
+days: 30

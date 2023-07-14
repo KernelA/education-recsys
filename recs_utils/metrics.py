@@ -5,31 +5,56 @@ import polars as pl
 import pandas as pd
 from tqdm.auto import tqdm
 
-from .implicit_model import ModelRecommender
+from .base_model import BaseRecommender
 
 USER_ID_COL = "user_id"
 ITEM_ID_COL = "item_id"
 
 
-def model_cross_validate(interactions: pl.DataFrame, item_features: pl.DataFrame, user_features: pl.DataFrame, folds, model_factory: Callable[[], ModelRecommender], n: int):
+def model_cross_validate(
+        user_item_interactions: pl.DataFrame,
+        item_features: pl.DataFrame,
+        user_features: pl.DataFrame,
+        folds,
+        model_factory: Callable[[], BaseRecommender],
+        num_recs: int):
     validation_results = []
 
+    if not folds:
+        raise RuntimeError("Empty folds detected")
+
     for num_fold, (train_idx, test_idx, info) in enumerate(tqdm(folds), 1):
-        train = interactions.join(train_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
-        test = interactions.join(test_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
+        train_interactions = user_item_interactions.join(
+            train_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
+        test_interactions = user_item_interactions.join(
+            test_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
+
         train_item_features = item_features.filter(pl.col(ITEM_ID_COL).is_in(
-            train.select(pl.col(ITEM_ID_COL).unique()).to_series()))
+            train_interactions.get_column(ITEM_ID_COL).unique()))
         train_user_features = user_features.filter(pl.col(USER_ID_COL).is_in(
-            train.select(pl.col(USER_ID_COL).unique()).to_series()))
+            train_interactions.get_column(USER_ID_COL).unique()))
 
-        model: ModelRecommender = model_factory()
-        model.fit(train, progress=False, train_item_features=train_item_features,
-                  train_user_features=train_user_features)
-        pred_recs: pl.DataFrame = model.recommend(test.select(pl.col(USER_ID_COL).unique()).to_series(), n)
+        model: BaseRecommender = model_factory()
+        model.fit(
+            train_interactions,
+            item_features=train_item_features,
+            user_features=train_user_features)
 
-        metrics = compute_metrics(test, pred_recs, n)
+        test_item_features = item_features.filter(pl.col(ITEM_ID_COL).is_in(
+            test_interactions.get_column(ITEM_ID_COL).unique()))
+        test_user_features = user_features.filter(pl.col(USER_ID_COL).is_in(
+            test_interactions.get_column(USER_ID_COL).unique()))
+
+        pred_recs: pl.DataFrame = model.recommend(
+            test_interactions,
+            num_recs,
+            user_features=test_user_features,
+            item_features=test_item_features)
+
+        metrics = compute_metrics(test_interactions, pred_recs, num_recs)
+
         metrics = metrics.with_columns(
-            pl.lit(model.model_name()).alias("model"),
+            pl.lit(model.model_name).alias("model"),
             pl.lit(info["Start date"]).alias("start_date"),
             pl.lit(info["End date"]).alias("end_date"),
             pl.lit(num_fold).alias("fold")
@@ -37,7 +62,7 @@ def model_cross_validate(interactions: pl.DataFrame, item_features: pl.DataFrame
         validation_results.append(metrics)
 
     cv_results: pl.DataFrame = pl.concat(validation_results)
-    cv_results = cv_results.with_columns(pl.col("model").cast(pl.Categorical).alias("model"))
+    cv_results = cv_results.with_columns(pl.col("model").cast(pl.Categorical))
     return cv_results.sort("start_date"), model
 
 
