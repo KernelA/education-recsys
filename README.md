@@ -1,7 +1,6 @@
-# metrics
+# Comparison of different RecSys methods
 
 ## Description
-
 
 ## Requirements
 
@@ -18,4 +17,13 @@ For development:
 ```
 pip install -r ./requirements.txt -r ./requirements.dev.txt
 ```
+
+[Setup Kaggle secrets](https://github.com/Kaggle/kaggle-api#api-credentials)
+
+Run:
+```
+dvc repro -R .
+```
+
+Open [show_results.ipynb](./show_results.ipynb)
 

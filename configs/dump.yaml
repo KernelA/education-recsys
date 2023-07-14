@@ -1,0 +1,8 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+defaults:
+ - data: mts_lib
+ - _self_

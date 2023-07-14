@@ -1,0 +1,5 @@
+_target_: recs_utils.implicit_model.ImplicitRecommender
+inner_model: 
+  _target_: implicit.nearest_neighbours.CosineRecommender
+  K: 10
+

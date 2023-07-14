@@ -1,0 +1,14 @@
+hydra:
+  run:
+    dir: ./exp/single
+  sweep:
+    dir: ./exp/multirun
+    subdir: ${hydra.job.num}_${hydra.job.override_dirname}
+  job:
+    chdir: true
+
+defaults:
+  - model: most_pop
+  - data: mts_lib
+  - cv: base
+  - _self_

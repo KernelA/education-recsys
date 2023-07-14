@@ -1,0 +1,104 @@
+stages:
+  download_data:
+    vars:
+      - ./configs/data/mts_lib.yaml:raw_dir
+    cmd: kaggle datasets download -d sharthz23/mts-library --unzip -p ${raw_dir}
+    outs:
+      - ${raw_dir}
+
+  dump_data:
+    vars:
+      - ./configs/data/mts_lib.yaml
+    cmd: python ./dump_data.py
+    deps:
+      - ./dump_data.py
+      - ./configs/data/mts_lib.yaml
+      - ./configs/dump.yaml
+      - ${raw_dir}
+    outs:
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+
+  cross_validate_fast_algorithms:
+    vars:
+      - ./configs/data/mts_lib.yaml
+      - ./configs/cross_val.yaml
+      - sweep_dir: ./exp/cross_val_fast
+    cmd: python ./train_recommender.py -m model=most_pop_per_age,most_pop,bm25,cosine,tfidf hydra.sweep.dir=${sweep_dir}
+    deps:
+      - ./configs/model/bm25.yaml
+      - ./configs/model/cosine.yaml
+      - ./configs/model/tfidf.yaml
+      - ./configs/model/most_pop.yaml
+      - ./configs/model/most_pop_per_age.yaml
+      - ./configs/cross_val.yaml
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${sweep_dir}
+
+  cross_validate_als:
+    vars:
+      - ./configs/data/mts_lib.yaml
+      - ./configs/cross_val.yaml
+      - sweep_dir: ./exp/cross_val_als
+    cmd: python ./train_recommender.py -m model=als hydra.sweep.dir=${sweep_dir}
+    deps:
+      - ./configs/model/als.yaml
+      - ./configs/cross_val.yaml
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${sweep_dir}
+
+  cross_validate_lightgm:
+    vars:
+      - ./configs/data/mts_lib.yaml
+      - ./configs/cross_val.yaml
+      - sweep_dir: ./exp/cross_val_lightfm
+    cmd: python ./train_recommender.py -m model=lightfm hydra.sweep.dir=${sweep_dir}
+    deps:
+      - ./configs/model/lightfm.yaml
+      - ./configs/cross_val.yaml
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${sweep_dir}
+
+  als_hyperparams_search:
+    vars:
+      - ./configs/data/mts_lib.yaml
+      - ./configs/als_optim.yaml
+    cmd: python ./train_recommender.py -m -cn als_optim
+    deps:
+      - ./configs/model/als.yaml
+      - ./configs/als_optim.yaml
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${hydra.sweep.dir}
+  
+  lightfm_hyperparams_search:
+    vars:
+      - ./configs/data/mts_lib.yaml
+      - ./configs/lightfm_optim.yaml
+    cmd: python ./train_recommender.py -m -cn lightfm_optim
+    deps:
+      - ./configs/model/lightfm.yaml
+      - ./configs/lightfm_optim.yaml
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${hydra.sweep.dir}
+  
