@@ -2,7 +2,7 @@ hydra:
   run:
     dir: ./exp/single
   sweep:
-    dir: ./exp/lightfm_hyperparams
+    dir: ./exp/hyperparams_light_fm
     subdir: ${hydra.job.num}_${hydra.job.override_dirname}
   job:
     chdir: true
@@ -24,8 +24,9 @@ hydra:
     study_name: lighfm
     n_trials: 10
     params:
-      model.model.no_components: choice(16, 32, 64)
+      model.model.no_components: choice(16, 32)
       model.model.learning_rate: range(0.05, 0.2, step=0.01)
+      model.num_epoch: range(5, 10)
 
 defaults:
   - model: lightfm

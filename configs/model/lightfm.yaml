@@ -1,17 +1,17 @@
 _target_: recs_utils.hybrid_model.LightFMRecommender
-num_epoch: 2
+num_epoch: 15
 num_threads: 6
 model:
   _target_: lightfm.lightfm.LightFM
-  no_components: 16
+  no_components: 64
   k: 5
   n: 10
   learning_schedule: "adagrad"
-  loss: "logistic"
+  loss: "warp"
   learning_rate: 0.05
   rho: 0.95
   epsilon: 1e-6
   item_alpha: 0.0
   user_alpha: 0.0
-  max_sampled: 10
-  random_state: 1298
+  max_sampled: 5
+  random_state: 23

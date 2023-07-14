@@ -44,7 +44,7 @@ stages:
     vars:
       - ./configs/data/mts_lib.yaml
       - ./configs/cross_val.yaml
-      - sweep_dir: ./epx/cross_val_als
+      - sweep_dir: ./exp/cross_val_als
     cmd: python ./train_recommender.py -m model=als hydra.sweep.dir=${sweep_dir}
     deps:
       - ./configs/model/als.yaml
@@ -56,11 +56,27 @@ stages:
     outs:
       - ${sweep_dir}
 
+  cross_validate_lightgm:
+    vars:
+      - ./configs/data/mts_lib.yaml
+      - ./configs/cross_val.yaml
+      - sweep_dir: ./exp/cross_val_lightfm
+    cmd: python ./train_recommender.py -m model=lightfm hydra.sweep.dir=${sweep_dir}
+    deps:
+      - ./configs/model/lightfm.yaml
+      - ./configs/cross_val.yaml
+      - ./train_recommender.py
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+    outs:
+      - ${sweep_dir}
+
   als_hyperparams_search:
     vars:
       - ./configs/data/mts_lib.yaml
-      - sweep_dir: ./exp/hyperparams_als
-    cmd: python ./train_recommender.py -m -cn als_optim hydra.sweep.dir=${sweep_dir}
+      - ./configs/als_optim.yaml
+    cmd: python ./train_recommender.py -m -cn als_optim
     deps:
       - ./configs/model/als.yaml
       - ./configs/als_optim.yaml
@@ -69,13 +85,13 @@ stages:
       - ${dump_files.users_path}
       - ${dump_files.items_path}
     outs:
-      - ${sweep_dir}
+      - ${hydra.sweep.dir}
   
   lightfm_hyperparams_search:
     vars:
       - ./configs/data/mts_lib.yaml
-      - sweep_dir: ./exp/light_fm
-    cmd: python ./train_recommender.py -m -cn lightfm_optim hydra.sweep.dir=${sweep_dir}
+      - ./configs/lightfm_optim.yaml
+    cmd: python ./train_recommender.py -m -cn lightfm_optim
     deps:
       - ./configs/model/lightfm.yaml
       - ./configs/lightfm_optim.yaml
@@ -84,5 +100,5 @@ stages:
       - ${dump_files.users_path}
       - ${dump_files.items_path}
     outs:
-      - ${sweep_dir}
+      - ${hydra.sweep.dir}
   

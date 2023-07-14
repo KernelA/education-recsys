@@ -2,7 +2,7 @@ hydra:
   run:
     dir: ./exp/single
   sweep:
-    dir: ./exp/als_hyperparams
+    dir: ./exp/hyperparams_als
     subdir: ${hydra.job.num}_${hydra.job.override_dirname}
   job:
     chdir: true
