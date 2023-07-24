@@ -1,14 +1,38 @@
 from collections import defaultdict
 from typing import Callable
 
-import polars as pl
 import pandas as pd
+import polars as pl
+from scipy.spatial import distance
 from tqdm.auto import tqdm
 
 from .base_model import BaseRecommender
 
 USER_ID_COL = "user_id"
 ITEM_ID_COL = "item_id"
+
+
+def _compute_diversity_value(condensed_distance_matrix, num_items: int):
+    return 2 / (num_items * (num_items - 1)) * condensed_distance_matrix.sum()
+
+
+def intra_list_diversity_hamming_per_user(recommendations: pl.DataFrame, item_features: pl.DataFrame):
+    user_ids = []
+    diversity_values = []
+
+    for user_id, group in recommendations.groupby(USER_ID_COL):
+        user_ids.append(user_id)
+        num_items = group.get_column("rank").max()
+        diversity_values.append(
+            _compute_diversity_value(
+                distance.pdist(
+                    group.select(ITEM_ID_COL).join(item_features, on=ITEM_ID_COL).select(
+                        pl.all().exclude(ITEM_ID_COL)).to_numpy(), metric="hamming"), num_items
+            )
+        )
+
+    return pl.DataFrame({USER_ID_COL: user_ids, "intra_list_div": diversity_values},
+                        schema={USER_ID_COL: recommendations.schema[USER_ID_COL], "intra_list_div": pl.Float32})
 
 
 def model_cross_validate(
