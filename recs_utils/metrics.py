@@ -1,14 +1,79 @@
 from collections import defaultdict
 from typing import Callable
 
-import polars as pl
 import pandas as pd
+import polars as pl
+from scipy.spatial import distance
 from tqdm.auto import tqdm
 
 from .base_model import BaseRecommender
 
 USER_ID_COL = "user_id"
 ITEM_ID_COL = "item_id"
+
+
+def _compute_diversity_value(condensed_distance_matrix, num_items: int):
+    return 2 / (num_items * (num_items - 1)) * condensed_distance_matrix.sum()
+
+
+def intra_list_diversity_hamming_per_user(recommendations: pl.DataFrame, item_features: pl.DataFrame):
+    user_ids = []
+    diversity_values = []
+
+    for user_id, group in recommendations.groupby(USER_ID_COL):
+        user_ids.append(user_id)
+        num_items = group.get_column("rank").max()
+        diversity_values.append(
+            _compute_diversity_value(
+                distance.pdist(
+                    group.select(ITEM_ID_COL).join(item_features, on=ITEM_ID_COL).select(
+                        pl.all().exclude(ITEM_ID_COL)).to_numpy(), metric="hamming"), num_items
+            )
+        )
+
+    return pl.DataFrame({USER_ID_COL: user_ids, "intra_list_div": diversity_values},
+                        schema={USER_ID_COL: recommendations.schema[USER_ID_COL], "intra_list_div": pl.Float32})
+
+
+def mean_inverse_user_freq_per_user(recommendations: pl.DataFrame, train_interactions: pl.DataFrame):
+    num_users = train_interactions.get_column(USER_ID_COL).n_unique()
+    num_users_per_item = train_interactions.groupby(
+        ITEM_ID_COL).agg(pl.n_unique(USER_ID_COL).alias("num_inter_users"))
+
+    num_users_per_item = num_users_per_item.vstack(
+        recommendations.lazy().select(pl.col(ITEM_ID_COL).unique()).join(
+            num_users_per_item.lazy(), how="anti", on=ITEM_ID_COL).with_columns(
+            pl.lit(1).cast(num_users_per_item.dtypes[num_users_per_item.columns.index("num_inter_users")]).alias("num_inter_users")).collect()
+    )
+
+    miuf_per_user = recommendations.lazy().join(num_users_per_item.lazy(), on=ITEM_ID_COL).select(
+        pl.col(USER_ID_COL), pl.col("rank"), (pl.col(
+            "num_inter_users") / num_users).log(base=2).alias("inv_user_freq")
+    ).groupby(USER_ID_COL).agg(
+        [
+            (-pl.mean("inv_user_freq")).alias("miuf")
+        ]).collect()
+
+    return miuf_per_user
+
+
+def serendipity_per_user(recommendations: pl.DataFrame, train_interactions: pl.DataFrame, test_interactions: pl.DataFrame):
+    item_pop_rank = train_interactions.lazy().select(pl.col(ITEM_ID_COL).value_counts(sort=True)).select(
+        pl.col(ITEM_ID_COL).struct.field(ITEM_ID_COL),
+        pl.col(ITEM_ID_COL).struct.field("counts").rank(
+            method="ordinal", descending=True).alias("item_pop_rank")
+    ).collect()
+
+    joined_data = recommendations.lazy().join(test_interactions.lazy().with_columns(
+        pl.lit(1).alias("rel")), how="left", on=[USER_ID_COL, ITEM_ID_COL]).with_columns(
+        pl.col("rel").fill_null(0)
+    )
+
+    return joined_data.join(
+        item_pop_rank.lazy(), on=ITEM_ID_COL).with_columns(
+        (pl.max(
+            pl.col("item_pop_rank") - pl.col("rank"), 0) * pl.col("rel")).alias("seren")
+    ).groupby(USER_ID_COL).agg(pl.mean("seren")).collect()
 
 
 def model_cross_validate(
@@ -67,7 +132,8 @@ def model_cross_validate(
 
 
 def join_true_pred_and_preprocess(true_pred: pl.DataFrame, recommendations: pl.DataFrame):
-    data = true_pred.lazy().join(recommendations.lazy(), how="left", on=[USER_ID_COL, ITEM_ID_COL])
+    data = true_pred.lazy().join(recommendations.lazy(),
+                                 how="left", on=[USER_ID_COL, ITEM_ID_COL])
     data = data.join(
         data.groupby(USER_ID_COL).agg(pl.count().alias("item_count_per_user")),
         on=USER_ID_COL
