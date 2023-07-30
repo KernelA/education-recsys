@@ -165,10 +165,10 @@ def compute_metrics(true_pred: pl.DataFrame, recs: pl.DataFrame, max_k: int, wit
         metrics["value"].append(value)
 
     add_metric_name("MRR", max_k, metrics)
-    metrics["value"].append(mean_reciprocal_rank(joined_data, max_k))
+    metrics["value"].append(mean_reciprocal_rank(joined_data))
 
     add_metric_name("MAP", max_k, metrics)
-    metrics["value"].append(mean_average_prec(joined_data, max_k))
+    metrics["value"].append(mean_average_prec(joined_data))
 
     return pl.from_dict(metrics)
 
@@ -200,14 +200,11 @@ def precision_at_k(joined_data: pl.DataFrame, k: int):
 
 def recall_at_k(joined_data: pl.DataFrame, k: int):
     joined_data = compute_hit_at_k(joined_data, k)
-    return (joined_data.select(pl.col(f"hit@{k}") / pl.col("item_count_per_user")).sum() / joined_data.select(pl.col("user_id").n_unique()))[0, 0], joined_data
+    return (joined_data.select(pl.col(f"hit@{k}") / pl.col("item_count_per_user")).sum() / joined_data.select(pl.col(USER_ID_COL).n_unique()))[0, 0], joined_data
 
 
-def mean_reciprocal_rank(joined_data: pl.DataFrame, k: int = -1):
+def mean_reciprocal_rank(joined_data: pl.DataFrame):
     mrr_eval = joined_data.lazy()
-
-    if k != -1:
-        mrr_eval = mrr_eval.filter(pl.col("rank") <= k)
 
     return mrr_eval.select(
         [
@@ -220,11 +217,10 @@ def mean_reciprocal_rank(joined_data: pl.DataFrame, k: int = -1):
     ).select("inv_rank").mean().collect()[0, 0]
 
 
-def mean_average_prec(joined_data: pl.DataFrame, k: int = -1):
+def mean_average_prec(joined_data: pl.DataFrame):
+    """k taken into account in the joined_data
+    """
     cumulative_rank = joined_data.lazy()
-
-    if k != -1:
-        cumulative_rank = cumulative_rank.filter(pl.col("rank") <= k)
 
     cumulative_rank = cumulative_rank\
         .select(

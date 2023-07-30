@@ -31,12 +31,12 @@ stages:
     outs:
     - path: ./data/mts/dump/interactions.parquet
       hash: md5
-      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      md5: 9c3d6ce18642c47955e917dd746330ea
       size: 11186434
     - path: ./data/mts/dump/items.parquet
       hash: md5
-      md5: 28c97e5a522986083efb3cf0adc006ba
-      size: 1883718
+      md5: 2951efbc9dfc29938a67c6d1b4601013
+      size: 1883213
     - path: ./data/mts/dump/users.parquet
       hash: md5
       md5: 0c0525030480b8ccc30ac4fb55c60879
@@ -105,23 +105,155 @@ stages:
       size: 134
     - path: ./data/mts/dump/interactions.parquet
       hash: md5
-      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      md5: 9c3d6ce18642c47955e917dd746330ea
       size: 11186434
     - path: ./data/mts/dump/items.parquet
       hash: md5
-      md5: 28c97e5a522986083efb3cf0adc006ba
-      size: 1883718
+      md5: 2951efbc9dfc29938a67c6d1b4601013
+      size: 1883213
     - path: ./data/mts/dump/users.parquet
       hash: md5
       md5: 0c0525030480b8ccc30ac4fb55c60879
       size: 524265
     - path: ./train_recommender.py
       hash: md5
-      md5: d399b93afdd633508d349bdc69472e7e
-      size: 1787
+      md5: c65105fe3e3f629a2f6a218e6f890594
+      size: 1809
     outs:
     - path: ./exp/cross_val_fast
       hash: md5
-      md5: b9074615bc05f92a774f4aa797e7aaf7.dir
-      size: 79265
+      md5: b2b908f7080c06c4e2160a90c264aa32.dir
+      size: 79680
       nfiles: 31
+  cross_validate_als:
+    cmd: python ./train_recommender.py -m model=als hydra.sweep.dir=./exp/cross_val_als
+    deps:
+    - path: ./configs/cross_val.yaml
+      hash: md5
+      md5: c7d22cf25efc01a46a73f6bfeb0bc3d7
+      size: 223
+    - path: ./configs/model/als.yaml
+      hash: md5
+      md5: c2bfe41e6373f266e3f8d129196217d4
+      size: 208
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 9c3d6ce18642c47955e917dd746330ea
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 2951efbc9dfc29938a67c6d1b4601013
+      size: 1883213
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: c65105fe3e3f629a2f6a218e6f890594
+      size: 1809
+    outs:
+    - path: ./exp/cross_val_als
+      hash: md5
+      md5: 306c0b5c5fee0c5dd8d04dc51d51990b.dir
+      size: 20264
+      nfiles: 7
+  cross_validate_lightgm:
+    cmd: python ./train_recommender.py -m model=lightfm hydra.sweep.dir=./exp/cross_val_lightfm
+    deps:
+    - path: ./configs/cross_val.yaml
+      hash: md5
+      md5: c7d22cf25efc01a46a73f6bfeb0bc3d7
+      size: 223
+    - path: ./configs/model/lightfm.yaml
+      hash: md5
+      md5: 76e6f0f3d7799d22b26aa104e4502381
+      size: 327
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 9c3d6ce18642c47955e917dd746330ea
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 2951efbc9dfc29938a67c6d1b4601013
+      size: 1883213
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: c65105fe3e3f629a2f6a218e6f890594
+      size: 1809
+    outs:
+    - path: ./exp/cross_val_lightfm
+      hash: md5
+      md5: 9dd901fbd79305a26e9ae966cc82def6.dir
+      size: 18161
+      nfiles: 7
+  als_hyperparams_search:
+    cmd: python ./train_recommender.py -m -cn als_optim
+    deps:
+    - path: ./configs/als_optim.yaml
+      hash: md5
+      md5: bd18f1d4c63ce052d9a3ff2cff0a8f8b
+      size: 961
+    - path: ./configs/model/als.yaml
+      hash: md5
+      md5: c2bfe41e6373f266e3f8d129196217d4
+      size: 208
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 9c3d6ce18642c47955e917dd746330ea
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 2951efbc9dfc29938a67c6d1b4601013
+      size: 1883213
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: c65105fe3e3f629a2f6a218e6f890594
+      size: 1809
+    outs:
+    - path: ./exp/hyperparams_als
+      hash: md5
+      md5: a97defa6f976a19f04488584ee790284.dir
+      size: 525086
+      nfiles: 181
+  lightfm_hyperparams_search:
+    cmd: python ./train_recommender.py -m -cn lightfm_optim
+    deps:
+    - path: ./configs/lightfm_optim.yaml
+      hash: md5
+      md5: 38c6740bdfe41aafff2ec1209dbad05c
+      size: 903
+    - path: ./configs/model/lightfm.yaml
+      hash: md5
+      md5: 76e6f0f3d7799d22b26aa104e4502381
+      size: 327
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 9c3d6ce18642c47955e917dd746330ea
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: 2951efbc9dfc29938a67c6d1b4601013
+      size: 1883213
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 0c0525030480b8ccc30ac4fb55c60879
+      size: 524265
+    - path: ./train_recommender.py
+      hash: md5
+      md5: c65105fe3e3f629a2f6a218e6f890594
+      size: 1809
+    outs:
+    - path: ./exp/hyperparams_light_fm
+      hash: md5
+      md5: 261fb6570e06b527fd587cb374f217d3.dir
+      size: 149547
+      nfiles: 61
