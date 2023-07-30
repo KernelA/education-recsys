@@ -1,10 +1,10 @@
 import pathlib
 
-import polars as pl
 import hydra
+import polars as pl
 
+from recs_utils.metrics import ITEM_ID_COL, USER_ID_COL, model_cross_validate
 from recs_utils.split import TimeRangeSplit
-from recs_utils.metrics import model_cross_validate, USER_ID_COL, ITEM_ID_COL
 
 
 @hydra.main(config_path="configs", config_name="cross_val", version_base="1.3")
@@ -52,7 +52,7 @@ def main(config):
 
     metrics.write_csv("cv_res.csv")
 
-    return metrics.filter(pl.col("name") == "MAP").get_column("value").mean()
+    return metrics.filter(pl.col("name") == f"MAP@{config.cv.num_recs}").get_column("value").mean()
 
 
 if __name__ == "__main__":

@@ -1,11 +1,10 @@
+import warnings
 from typing import Iterable, Optional
 
-from sklearn.preprocessing import LabelEncoder
-from lightfm import LightFM
-from lightfm.data import Dataset
 import numpy as np
 import polars as pl
 from implicit.recommender_base import RecommenderBase as ImplicitBase
+from sklearn.preprocessing import LabelEncoder
 
 from .base_model import BaseItemSim
 from .matrix_ops import interactions_to_csr_matrix
@@ -84,7 +83,8 @@ class ImplicitRecommender(BaseItemSim):
                   user_item_interactions: pl.DataFrame,
                   num_recs_per_user: int = 10,
                   user_features: Optional[pl.DataFrame] = None,
-                  item_features: Optional[pl.DataFrame] = None):
+                  item_features: Optional[pl.DataFrame] = None,
+                  filter_already_liked_items: bool = True):
         assert self._train_matrix is not None, "Train first"
         assert self._schema is not None, "Train first"
         assert self._user_encoder is not None
@@ -98,8 +98,17 @@ class ImplicitRecommender(BaseItemSim):
             local_user_ids,
             self._train_matrix[local_user_ids, :],
             N=num_recs_per_user,
-            filter_already_liked_items=True)
+            filter_already_liked_items=filter_already_liked_items)
 
+        col_ids = col_ids.reshape(-1)
+        mask = col_ids == -1
+        num_missings = np.count_nonzero(mask)
+
+        if num_missings > 0:
+            warnings.warn(
+                f"Detected {num_missings} missing values for recommendations. Fill it with random items", UserWarning)
+
+        col_ids[mask] = np.random.randint(0, self._train_matrix.shape[1], size=num_missings)
         item_ids = self._item_encoder.inverse_transform(col_ids.reshape(-1))
 
         recs = pl.DataFrame(

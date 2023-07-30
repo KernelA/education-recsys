@@ -25,5 +25,5 @@ Run:
 dvc repro -R .
 ```
 
-Open [show_results.ipynb](./show_results.ipynb)
+Open [l2_coll_filtering.ipynb](./l2_coll_filtering.ipynb)
 

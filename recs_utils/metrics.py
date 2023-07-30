@@ -143,23 +143,31 @@ def join_true_pred_and_preprocess(true_pred: pl.DataFrame, recommendations: pl.D
     return data.collect()
 
 
-def compute_metrics(true_pred: pl.DataFrame, recs: pl.DataFrame, max_k: int):
+def compute_metrics(true_pred: pl.DataFrame, recs: pl.DataFrame, max_k: int, with_separate_k_col: bool = False):
     joined_data = join_true_pred_and_preprocess(true_pred, recs)
 
     metrics = defaultdict(list)
 
+    def add_metric_name(name, k, metrics):
+        if with_separate_k_col:
+            metrics["name"].append(name)
+            metrics["k"].append(k)
+        else:
+            metrics["name"].append(f"{name}@{k}")
+
     for k in range(1, max_k + 1, 1):
-        metrics["name"].append(f"prec@{k}")
+        add_metric_name("prec", k, metrics)
         value, joined_data = precision_at_k(joined_data, k)
         metrics["value"].append(value)
 
-        metrics["name"].append(f"recall@{k}")
+        add_metric_name("recall", k, metrics)
         value, joined_data = precision_at_k(joined_data, k)
         metrics["value"].append(value)
 
-    metrics["name"].append("MRR")
+    add_metric_name("MRR", max_k, metrics)
     metrics["value"].append(mean_reciprocal_rank(joined_data))
-    metrics["name"].append("MAP")
+
+    add_metric_name("MAP", max_k, metrics)
     metrics["value"].append(mean_average_prec(joined_data))
 
     return pl.from_dict(metrics)
@@ -192,11 +200,13 @@ def precision_at_k(joined_data: pl.DataFrame, k: int):
 
 def recall_at_k(joined_data: pl.DataFrame, k: int):
     joined_data = compute_hit_at_k(joined_data, k)
-    return (joined_data.select(pl.col(f"hit@{k}") / pl.col("item_count_per_user")).sum() / joined_data.select(pl.col("user_id").n_unique()))[0, 0], joined_data
+    return (joined_data.select(pl.col(f"hit@{k}") / pl.col("item_count_per_user")).sum() / joined_data.select(pl.col(USER_ID_COL).n_unique()))[0, 0], joined_data
 
 
 def mean_reciprocal_rank(joined_data: pl.DataFrame):
-    return joined_data.lazy().select(
+    mrr_eval = joined_data.lazy()
+
+    return mrr_eval.select(
         [
             pl.col(USER_ID_COL),
             (1 / pl.col("rank")).alias("inv_rank").fill_nan(0.0)
@@ -208,14 +218,18 @@ def mean_reciprocal_rank(joined_data: pl.DataFrame):
 
 
 def mean_average_prec(joined_data: pl.DataFrame):
-    cumulative_rank = joined_data.lazy()\
+    """k taken into account in the joined_data
+    """
+    cumulative_rank = joined_data.lazy()
+
+    cumulative_rank = cumulative_rank\
         .select(
             ((pl.col(USER_ID_COL).cumcount().over(USER_ID_COL) + 1) / pl.col("rank"))
-        .fill_nan(0.0)
-        .alias("cum_rank"),
+            .fill_nan(0.0)
+            .alias("cum_rank"),
             pl.col("item_count_per_user")
-    )
+        )
 
-    users_count = joined_data.select(pl.col(USER_ID_COL).n_unique())[0, 0]
+    users_count = joined_data.get_column(USER_ID_COL).n_unique()
 
     return cumulative_rank.select(pl.col("cum_rank") / pl.col("item_count_per_user")).sum().collect()[0, 0] / users_count

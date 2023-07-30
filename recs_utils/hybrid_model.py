@@ -1,6 +1,5 @@
 from typing import Optional
 
-import numba
 import numpy as np
 import polars as pl
 from lightfm import LightFM
