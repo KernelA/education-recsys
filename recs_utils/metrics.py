@@ -7,9 +7,7 @@ from scipy.spatial import distance
 from tqdm.auto import tqdm
 
 from .base_model import BaseRecommender
-
-USER_ID_COL = "user_id"
-ITEM_ID_COL = "item_id"
+from .constants import ITEM_ID_COL, USER_ID_COL
 
 
 def _compute_diversity_value(condensed_distance_matrix, num_items: int):
