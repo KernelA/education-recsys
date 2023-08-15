@@ -19,7 +19,9 @@ class LightFMRecommender(BaseRecommender):
                  num_threads: int,
                  user_col: str = "user_id",
                  item_column: str = "item_id",
-                 dt_column: str = "start_date"
+                 dt_column: str = "start_date",
+                 progress_column: Optional[str] = None,
+                 progress_quant_level: int = 5,
                  ):
         super().__init__(user_col=user_col, item_column=item_column, dt_column=dt_column)
         self._model = model
@@ -28,10 +30,12 @@ class LightFMRecommender(BaseRecommender):
         self._train_item_features = None
         self._user_item_uniq_train_inter = pl.DataFrame()
         self.num_threads = num_threads
+        self._progress_column = progress_column
         self._schema = None
         self.user_mapping = {}
         self.item_mapping = {}
         self.inv_item_mapping = {}
+        self._progress_quant_level = progress_quant_level
 
     @property
     def model_name(self):
@@ -56,44 +60,45 @@ class LightFMRecommender(BaseRecommender):
         dataset.fit(user_item_interactions.get_column(self.user_column).unique(),
                     user_item_interactions.get_column(self.item_column).unique())
 
-        user_features = user_features.clone()
-
         user_features = user_features.with_columns(
-            pl.col("age").cast(str).fill_null("age_unknown").cast(pl.Categorical),
-            pl.col("sex").cast(str).fill_null("sex_unknown").cast(pl.Categorical)
+            pl.col("age").cast(str).fill_null("age_unknown"),
+            pl.col("sex").cast(str).fill_null("sex_unknown")
         )
 
-        age_features = user_features.get_column("age").unique().to_list()
-        sex_features = user_features.get_column("sex").unique().to_list()
+        age_feature_names = user_features.get_column("age").unique().to_list()
+        sex_feature_names = user_features.get_column("sex").unique().to_list()
 
-        users_features = age_features + sex_features
-        dataset.fit_partial(user_features=users_features)
+        dataset.fit_partial(user_features=age_feature_names + sex_feature_names)
 
-        item_features = item_features.clone()
+        del age_feature_names
+        del sex_feature_names
+
         item_features = item_features.with_columns(
-            pl.col("genres").cast(str).fill_null(
-                "genre_unknown").cast(pl.Categorical)
+            pl.col("genres").cast(str).fill_null("genre_unknown")
         )
 
-        genres = item_features.get_column("genres").cast(
-            str).str.split(',').explode().unique().to_list()
+        genres = item_features.get_column("genres").str.split(',').explode().unique().to_list()
         dataset.fit_partial(item_features=genres)
 
-        lightfm_mapping = dataset.mapping()
-
-        self.user_mapping = lightfm_mapping[0]
-        self.item_mapping = lightfm_mapping[2]
+        self.user_mapping, _, self.item_mapping, _ = dataset.mapping()
         self.inv_item_mapping = {v: k for k, v in self.item_mapping.items()}
 
-        train_mat, _ = dataset.build_interactions(user_item_interactions.select(
-            pl.col(self.user_column),
-            pl.col(self.item_column)
-        ).iter_rows()
+        inter_cols = [pl.col(self.user_column), pl.col(self.item_column)]
+
+        if self._progress_column is not None:
+            user_item_interactions = user_item_interactions.with_columns(
+                (pl.col(self._progress_column) // self._progress_quant_level) * self._progress_quant_level)
+
+            inter_cols.append(pl.col(self._progress_column))
+
+        _, train_weight_matrix = dataset.build_interactions(user_item_interactions.select(
+            inter_cols
+        ).iter_rows(named=False)
         )
 
         user_features = user_features.with_columns(
-            pl.concat_list(pl.col("age").cast(str),
-                           pl.col("sex").cast(str)).alias("features")
+            pl.concat_list(pl.col("age"),
+                           pl.col("sex")).alias("features")
         )
 
         known_users_mask = user_features.get_column(self.user_column).is_in(
@@ -101,13 +106,15 @@ class LightFMRecommender(BaseRecommender):
 
         user_features = dataset.build_user_features(
             map(lambda x: to_light_fm_feature(x, self.user_column), user_features.filter(
-                known_users_mask).select(pl.col(self.user_column), pl.col('features')).to_dicts())
+                known_users_mask).select(pl.col(self.user_column), pl.col('features')).iter_rows(named=True))
         )
+
+        del known_users_mask
 
         self._train_user_features = user_features
 
         item_features = item_features.with_columns(
-            pl.col("genres").cast(str).str.split(",").alias("features")
+            pl.col("genres").str.split(",").alias("features")
         )
 
         known_items_mask = item_features.get_column(self.item_column).is_in(
@@ -117,11 +124,13 @@ class LightFMRecommender(BaseRecommender):
             map(lambda x: to_light_fm_feature(x, self.item_column), item_features.filter(known_items_mask).select(
                 pl.col(self.item_column),
                 pl.col("features")
-            ).to_dicts()))
+            ).iter_rows(named=True)))
+
+        del known_items_mask
 
         self._train_item_features = item_features
 
-        self._model.fit(train_mat,
+        self._model.fit(train_weight_matrix,
                         user_features=self._train_user_features,
                         item_features=self._train_item_features,
                         epochs=self.num_epoch,

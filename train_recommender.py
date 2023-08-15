@@ -22,6 +22,8 @@ def main(config):
     users = pl.read_parquet(users_path)
     items = pl.read_parquet(items_path)
 
+    items = MTSDataset.select_genres(items, 0.95, "unknown")
+
     def model_factory():
         return hydra.utils.instantiate(config.model)
 
