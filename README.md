@@ -8,6 +8,10 @@
 
 ## How to run
 
+```
+pip install -e .
+```
+
 Install dependencies:
 ```
 pip install -r. /requirements.txt

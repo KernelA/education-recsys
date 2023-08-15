@@ -1,7 +1,9 @@
-from typing import NamedTuple, Sequence
+from typing import Iterator, Sequence, Union
 
 import numpy as np
 import polars as pl
+import torch
+from sklearn.preprocessing import LabelEncoder
 from torch.utils import data
 
 from ..constants import ITEM_ID_COL, USER_ID_COL
@@ -22,40 +24,61 @@ class ShiftInfo:
 
 
 class UserDataset(data.Dataset):
-    def __init__(self, user_ids: pl.Series, user_features: pl.DataFrame) -> None:
+    def __init__(self, user_features: pl.DataFrame, user_encoder: LabelEncoder) -> None:
         super().__init__()
-        self.user_ids = user_ids
-        self.user_features = user_features
+        user_features = user_features.sort(USER_ID_COL)
+        self.user_ids = user_features.get_column(USER_ID_COL).to_numpy()
+        self.user_encoder = user_encoder
+        self.user_features = torch.from_numpy(user_features.select(
+            pl.col("*").exclude(USER_ID_COL)).to_numpy().astype(np.float32))
 
     def __len__(self):
         return len(self.user_ids)
 
-    def get_by_user_id(self, user_id: int):
-        user_features = self.user_features.filter(pl.col(USER_ID_COL) == user_id).select(
-            pl.col("*").exclude(USER_ID_COL)).to_numpy().reshape(-1).astype(np.float32)
+    def get_by_user_id(self, user_id: Union[int, np.ndarray]):
+        if isinstance(user_id, int):
+            user_id = [user_id]
 
-        return {"user_id": user_id, "user_features": user_features}
+        indices = np.searchsorted(self.user_ids, user_id)
 
-    def __getitem__(self, index):
+        return {
+            "local_user_id": torch.from_numpy(self.user_encoder.transform(user_id)),
+            "user_features": self.user_features[indices, :]
+        }
+
+    def __getitem__(self, index: Union[int, np.ndarray]):
         user_id = self.user_ids[index]
-        return self.get_by_user_id(user_id)
+        info = self.get_by_user_id(user_id)
+        return info
 
 
 class ItemDataset(data.Dataset):
-    def __init__(self, item_ids: pl.Series, item_features: pl.DataFrame, item_key_name: str, item_features_key_name: str):
+    def __init__(self,
+                 item_features: pl.DataFrame,
+                 item_encoder: LabelEncoder,
+                 item_key_name: str, item_features_key_name: str):
         super().__init__()
-        self.item_ids = item_ids
-        self.item_features = item_features
+        item_features = item_features.sort(ITEM_ID_COL)
+        self.item_ids = item_features.get_column(ITEM_ID_COL).to_numpy()
+        self.item_encoder = item_encoder
+        self.item_features = torch.from_numpy(item_features.select(
+            pl.col("*").exclude(ITEM_ID_COL)).to_numpy().astype(np.float32))
         self.item_key_name = item_key_name
         self.item_features_name = item_features_key_name
 
     def __len__(self):
         return len(self.item_ids)
 
-    def get_by_item_id(self, item_id: int):
-        item_features = self.item_features.filter(pl.col(ITEM_ID_COL) == item_id).select(
-            pl.col("*").exclude(ITEM_ID_COL)).to_numpy().reshape(-1).astype(np.float32)
-        return {self.item_key_name: item_id, self.item_features_name: item_features}
+    def get_by_item_id(self, item_id: Union[int, np.ndarray]):
+        if isinstance(item_id, int):
+            item_id = [item_id]
+
+        indices = np.searchsorted(self.item_ids, item_id)
+
+        return {
+            self.item_key_name: torch.from_numpy(self.item_encoder.transform(item_id)),
+            self.item_features_name: self.item_features[indices, :]
+        }
 
     def __getitem__(self, index):
         item_id = self.item_ids[index]
@@ -63,40 +86,61 @@ class ItemDataset(data.Dataset):
 
 
 class TripletDataset(data.Dataset):
-    def __init__(self, samples: pl.DataFrame, user_features: pl.DataFrame, item_features: pl.DataFrame):
-        pos_samples = samples.filter(pl.col("target") == 1).select(
+    def __init__(self,
+                 samples: pl.DataFrame,
+                 user_features: pl.DataFrame,
+                 item_features: pl.DataFrame,
+                 user_encoder: LabelEncoder,
+                 item_encoder: LabelEncoder):
+
+        self.pos_samples = samples.filter(pl.col("target") == 1).select(
             pl.col(USER_ID_COL, ITEM_ID_COL))
+        neg_samples = samples.filter(pl.col("target") == 0).select(pl.col(USER_ID_COL, ITEM_ID_COL))
 
-        neg_samples = samples.filter(pl.col("target") == 0)
+        self.user_dataset = UserDataset(user_features.join(
+            samples.select(pl.col(USER_ID_COL)), on=[USER_ID_COL], how="inner"), user_encoder=user_encoder)
 
-        self.user_dataset = UserDataset(
-            pos_samples.get_column(USER_ID_COL).unique(), user_features)
+        self.pos_items_dataset = ItemDataset(item_features.join(self.pos_samples.select(pl.col(ITEM_ID_COL)), on=ITEM_ID_COL, how="inner"),
+                                             item_key_name="local_pos_item_id",
+                                             item_features_key_name="pos_item_features",
+                                             item_encoder=item_encoder)
 
-        pos_item_ids = pos_samples.get_column(ITEM_ID_COL).unique()
-        self.pos_items_dataset = ItemDataset(pos_item_ids, item_features.filter(pl.col(ITEM_ID_COL).is_in(pos_item_ids)),
-                                             item_key_name="pos_item_id",
-                                             item_features_key_name="pos_item_features")
+        self.neg_item_dataset = ItemDataset(item_features.join(neg_samples.select(pl.col(ITEM_ID_COL)), on=ITEM_ID_COL, how="inner"),
+                                            item_key_name="local_neg_item_id",
+                                            item_features_key_name="neg_item_features",
+                                            item_encoder=item_encoder)
 
-        neg_item_ids = neg_samples.get_column(ITEM_ID_COL).unique()
-        self.neg_item_dataset = ItemDataset(neg_item_ids, item_features.filter(pl.col(ITEM_ID_COL).is_in(neg_item_ids)), item_key_name="neg_item_id",
-                                            item_features_key_name="neg_item_features")
-
-        self.pos_samples = pos_samples.to_dicts()
-        self.shifts = {}
-
-        for row in neg_samples.groupby(USER_ID_COL).agg(pl.list(ITEM_ID_COL).flatten()).iter_rows(named=True):
-            self.shifts[row[USER_ID_COL]] = ShiftInfo(row[ITEM_ID_COL])
+        self.shifts = neg_samples.sort(USER_ID_COL).set_sorted(USER_ID_COL).with_columns(pl.count(ITEM_ID_COL).over(
+            USER_ID_COL).alias("total_items")).with_columns(
+            pl.lit(0).alias("start_index"),
+            pl.col(ITEM_ID_COL).rank("ordinal").alias("pos").over(USER_ID_COL) - 1)
 
     def __len__(self):
         return len(self.pos_samples)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: Union[int, np.ndarray]):
         info = self.pos_samples[index]
-        user_id = info[USER_ID_COL]
-        pos_item_id = info[ITEM_ID_COL]
-        neg_item_id = self.shifts[user_id].next_item()
 
-        user_info = self.user_dataset.get_by_user_id(user_id)
+        user_ids = info.get_column(USER_ID_COL).to_numpy()
+        pos_item_id = info.get_column(ITEM_ID_COL).to_numpy()
+
+        selected_neg_items = self.shifts.filter(pl.col(USER_ID_COL).is_in(user_ids))
+
+        neg_item_id = info.select(pl.col(USER_ID_COL)).join(
+            selected_neg_items.filter(pl.col("pos") == pl.col("start_index")).select(
+                pl.col(USER_ID_COL, ITEM_ID_COL),
+            ), on=USER_ID_COL, how="inner").get_column(ITEM_ID_COL).to_numpy()
+
+        assert len(user_ids) == len(pos_item_id)
+        assert len(neg_item_id) == len(pos_item_id)
+
+        selected_neg_items = selected_neg_items.with_columns(((pl.col("start_index") + 1) %
+                                                              pl.col("total_items")).alias("start_index").cast(pl.Int32))
+
+        self.shifts = self.shifts.join(
+            selected_neg_items, on=[USER_ID_COL, ITEM_ID_COL], how="anti").vstack(selected_neg_items)
+
+        user_info = self.user_dataset.get_by_user_id(user_ids)
         pos_info = self.pos_items_dataset.get_by_item_id(pos_item_id)
         neg_info = self.neg_item_dataset.get_by_item_id(neg_item_id)
 

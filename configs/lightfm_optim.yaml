@@ -32,5 +32,9 @@ defaults:
   - model: lightfm
   - data: mts_lib
   - cv: base
+  - wandb: base
   - _self_
   - override hydra/sweeper: optuna
+
+wandb:
+  group: "lightfm-hyperparams-search"

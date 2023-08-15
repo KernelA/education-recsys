@@ -6,7 +6,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "metrics"
+name = "recs_utils"
 authors =[ { name="None"  }]
 requires-python = ">=3.10"
 version = "0.0.1"

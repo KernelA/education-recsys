@@ -11,4 +11,8 @@ defaults:
   - model: most_pop
   - data: mts_lib
   - cv: base
+  - wandb: base
   - _self_
+
+wandb:
+  group: "cross-val"

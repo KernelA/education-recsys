@@ -1,9 +1,9 @@
-from typing import List, Optional, Union
 import pathlib
+from typing import List, Optional, Union
 
 import polars as pl
 
-from .metrics import USER_ID_COL, ITEM_ID_COL
+from .metrics import ITEM_ID_COL, USER_ID_COL
 
 PathType = Union[str, pathlib.Path]
 
@@ -167,16 +167,24 @@ class MTSDataset:
 
     @ staticmethod
     def load_items(path_to_data: PathType):
-        return pl.read_csv(
+        items = pl.read_csv(
             path_to_data,
             dtypes={
                 "id": pl.UInt32,
-                "genres": pl.Categorical,
-                "authors": pl.Categorical,
+                "genres": pl.Utf8,
+                "authors": pl.Utf8,
                 "year": pl.Categorical
             },
             new_columns=[ITEM_ID_COL]
         )
+
+        items = items.with_columns(
+            pl.col("title").str.strip().str.to_lowercase(),
+            pl.col("genres").cast(str).str.strip().str.to_lowercase().str.split(
+                ",").arr.sort().arr.join(",")
+        )
+
+        return items
 
     @ staticmethod
     def load_users(path_to_data: PathType):
@@ -184,8 +192,17 @@ class MTSDataset:
             "age": pl.Categorical,
             USER_ID_COL: pl.UInt32,
             "sex": pl.Float32}).with_columns(
-                pl.col("sex").cast(pl.Int8)
+                pl.col("sex").cast(pl.Int8).cast(str).cast(pl.Categorical)
         )
+
+    @staticmethod
+    def filter_noise_interactions(interactions: pl.DataFrame):
+        interactions = interactions.filter(pl.col("progress") > 0)
+        selected_user_ids = interactions.lazy().groupby(USER_ID_COL).agg(pl.n_unique(ITEM_ID_COL).alias("num_inter_items")).filter(
+            pl.col("num_inter_items") > 4
+        ).collect().get_column(USER_ID_COL).unique()
+
+        return interactions.filter(pl.col(USER_ID_COL).is_in(selected_user_ids))
 
     @ staticmethod
     def select_genres(items: pl.DataFrame, cov: float, null_value: Optional[str] = None):

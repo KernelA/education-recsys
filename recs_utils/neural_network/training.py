@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tqdm.auto import tqdm
 
 from .model import NeuralNetRecommender
 
@@ -18,19 +19,18 @@ def valid_one_epoch(*,
     num_samples = 0
 
     for batch in data_loader:
-        for key in batch:
-            batch[key] = batch[key].to(device)
+        batch_samples = batch["local_user_id"].shape[0]
         user_features, pos_item_features, neg_item_features = model(
-            batch["user_id"],
-            batch["user_features"],
-            batch["pos_item_id"],
-            batch["pos_item_features"],
-            batch["neg_item_id"],
-            batch["neg_item_features"]
+            batch["local_user_id"].to(device),
+            batch["user_features"].to(device),
+            batch["local_pos_item_id"].to(device),
+            batch["pos_item_features"].to(device),
+            batch["local_neg_item_id"].to(device),
+            batch["neg_item_features"].to(device)
         )
         loss = triplet_loss(user_features, pos_item_features, neg_item_features)
-        loss_value += batch.shape[0] * loss.item()
-        num_samples += batch.shape[0]
+        loss_value += batch_samples * loss.item()
+        num_samples += batch_samples
 
     return loss_value / num_samples
 
@@ -47,24 +47,23 @@ def train_one_epoch(*,
     num_samples = 0
 
     for batch in data_loader:
-        for key in batch:
-            batch[key] = batch[key].to(device)
-
         optimizer.zero_grad()
 
+        batch_samples = batch["local_user_id"].shape[0]
+
         user_features, pos_item_features, neg_item_features = model(
-            batch["user_id"],
-            batch["user_features"],
-            batch["pos_item_id"],
-            batch["pos_item_features"],
-            batch["neg_item_id"],
-            batch["neg_item_features"]
+            batch["local_user_id"].to(device),
+            batch["user_features"].to(device),
+            batch["local_pos_item_id"].to(device),
+            batch["pos_item_features"].to(device),
+            batch["local_neg_item_id"].to(device),
+            batch["neg_item_features"].to(device)
         )
 
         loss = triplet_loss(user_features, pos_item_features, neg_item_features)
         loss.backward()
         optimizer.step()
-        loss_value += batch.shape[0] * loss.item()
-        num_samples += batch.shape[0]
+        loss_value += batch_samples * loss.item()
+        num_samples += batch_samples
 
     return loss_value / num_samples

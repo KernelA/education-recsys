@@ -1,7 +1,9 @@
-_target_: recs_utils.implicit_model.ImplicitRecommender
+_target_: recs_utils.implicit_model.ImplicitALS
+rating_col_name: 'progress'
 inner_model:
   _target_: implicit.als.AlternatingLeastSquares
   factors: 64
+  use_native: true
   regularization: 0.5
   alpha: 1.0
   iterations: 10
