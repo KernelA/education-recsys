@@ -4,7 +4,7 @@ inner_model:
   _target_: implicit.als.AlternatingLeastSquares
   factors: 64
   use_native: true
-  regularization: 0.5
+  regularization: 2.01
   alpha: 1.0
-  iterations: 10
+  iterations: 8
   random_state: 1921239

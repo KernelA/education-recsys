@@ -46,7 +46,9 @@ def main(config):
     full_config = OmegaConf.to_object(config)
 
     wandb.init(project=config.wandb.project_name, config=full_config,
-               group=config.wandb.group, reinit=True)
+               group=config.wandb.group, reinit=True,
+               settings=wandb.Settings(_disable_stats=True)
+               )
     folds_info_with_stats = pl.DataFrame([info for _, _, info in folds_with_stats])
     folds_info_with_stats.write_csv("cv_stat.csv")
     wandb.log({"cv_stat": wandb.Table(dataframe=folds_info_with_stats.to_pandas())})
