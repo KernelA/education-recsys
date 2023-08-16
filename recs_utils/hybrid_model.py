@@ -4,6 +4,7 @@ import numpy as np
 import polars as pl
 from lightfm import LightFM
 from lightfm.data import Dataset
+from tqdm.auto import tqdm
 
 from .base_model import BaseRecommender
 
@@ -141,41 +142,65 @@ class LightFMRecommender(BaseRecommender):
                   user_item_interactions: pl.DataFrame,
                   num_recs_per_user: int = 10,
                   user_features: Optional[pl.DataFrame] = None,
-                  item_features: Optional[pl.DataFrame] = None, **kwargs):
+                  item_features: Optional[pl.DataFrame] = None,
+                  user_batch_size: Optional[int] = None,
+                  is_prediction_progress: bool = False,
+                  filter_already_liked: bool = True,
+                  ** kwargs):
         assert self._schema is not None, "Train first fit(...)"
 
         user_ids = user_item_interactions.get_column(self.user_column).unique()
         local_user_ids = user_ids.apply(self.user_mapping.get).to_numpy()
 
         num_uniq_users = len(local_user_ids)
-        local_item_ids = list(self.item_mapping.values())
+        local_item_ids = np.array(tuple(self.item_mapping.values()))
         num_uniq_items = len(local_item_ids)
 
-        local_item_ids *= num_uniq_users
-        local_user_ids = local_user_ids.repeat(num_uniq_items)
-
-        predicted_scores = self._model.predict(
-            local_user_ids,
-            local_item_ids,
-            item_features=self._train_item_features,
-            user_features=self._train_user_features,
-            num_threads=self.num_threads)
-
-        predicted_scores = predicted_scores.reshape((num_uniq_users, num_uniq_items))
+        if user_batch_size is None:
+            user_batch_size = num_uniq_users
 
         max_interacted_items = self._user_item_uniq_train_inter.groupby(
             self.user_column).count().get_column("count").max()
 
         total_items_per_user = num_recs_per_user + max_interacted_items
 
-        local_item_ids = np.flip(np.argpartition(predicted_scores, -np.arange(total_items_per_user), axis=1)
-                                 [:, -total_items_per_user:], axis=1)
-        local_item_ids = local_item_ids.reshape(-1)
+        start_index = 0
+
+        predicted_local_item_ids = []
+
+        pred_progress = tqdm(total=len(local_user_ids), disable=not is_pred_progress, mininterval=3)
+
+        while start_index < len(local_user_ids):
+            local_user_ids_batch = local_user_ids[start_index: start_index + user_batch_size]
+            start_index += user_batch_size
+            num_users_in_batch = len(local_user_ids_batch)
+            local_user_ids_batch = local_user_ids_batch.repeat(num_uniq_items)
+            local_item_ids_batch = np.tile(local_item_ids, num_users_in_batch)
+
+            predicted_scores = self._model.predict(
+                local_user_ids_batch,
+                local_item_ids_batch,
+                item_features=self._train_item_features,
+                user_features=self._train_user_features,
+                num_threads=self.num_threads)
+
+            del local_user_ids_batch
+            del local_item_ids_batch
+
+            predicted_scores = predicted_scores.reshape((num_users_in_batch, num_uniq_items))
+            local_batch_item_ids = np.flip(np.argpartition(predicted_scores, -np.arange(total_items_per_user), axis=1)
+                                           [:, -total_items_per_user:], axis=1)
+
+            predicted_local_item_ids.append(local_batch_item_ids.reshape(-1))
+            del local_batch_item_ids
+            pred_progress.update(n=num_users_in_batch)
+
+        predicted_local_item_ids = np.concatenate(predicted_local_item_ids)
 
         recs = pl.DataFrame(
             {
                 self.user_column: np.asarray(user_ids).repeat(total_items_per_user),
-                self.item_column: local_item_ids
+                self.item_column: predicted_local_item_ids
             },
             schema={k: v for (k, v) in self._schema.items()
                     if k in (self.user_column, self.item_column)}
@@ -184,8 +209,10 @@ class LightFMRecommender(BaseRecommender):
         recs = recs.with_columns(pl.col(self.item_column).apply(
             self.inv_item_mapping.get).cast(self._schema[self.item_column]))
 
-        recs = recs.join(self._user_item_uniq_train_inter, on=[
-                         self.user_column, self.item_column], how="anti")
+        if filter_already_liked:
+            recs = recs.join(self._user_item_uniq_train_inter, on=[
+                self.user_column, self.item_column], how="anti")
+
         recs = recs.with_columns(
             (pl.col(self.user_column).cumcount().over(self.user_column) + 1).alias("rank"))
 
