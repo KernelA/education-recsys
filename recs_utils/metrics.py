@@ -7,7 +7,7 @@ from scipy.spatial import distance
 from tqdm.auto import tqdm
 
 from .base_model import BaseRecommender
-from .constants import ITEM_ID_COL, USER_ID_COL
+from .constants import ITEM_ID_COL, TARGET_COL, USER_ID_COL
 
 
 def _compute_diversity_value(condensed_distance_matrix, num_items: int):
@@ -89,8 +89,6 @@ def model_cross_validate(
     for num_fold, (train_idx, test_idx, info) in enumerate(tqdm(folds), 1):
         train_interactions = user_item_interactions.join(
             train_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
-        test_interactions = user_item_interactions.join(
-            test_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
 
         train_item_features = item_features.filter(pl.col(ITEM_ID_COL).is_in(
             train_interactions.get_column(ITEM_ID_COL).unique()))
@@ -102,6 +100,16 @@ def model_cross_validate(
             train_interactions,
             item_features=train_item_features,
             user_features=train_user_features)
+
+        del train_interactions
+        del train_item_features
+        del train_user_features
+
+        test_interactions = user_item_interactions.join(
+            test_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
+
+        if TARGET_COL in test_interactions.columns:
+            test_interactions = test_interactions.filter(pl.col(TARGET_COL) > 0)
 
         test_item_features = item_features.filter(pl.col(ITEM_ID_COL).is_in(
             test_interactions.get_column(ITEM_ID_COL).unique()))
@@ -117,15 +125,14 @@ def model_cross_validate(
         metrics = compute_metrics(test_interactions, pred_recs, num_recs)
 
         metrics = metrics.with_columns(
-            pl.lit(model.model_name).alias("model"),
-            pl.lit(info["Start date"]).alias("start_date"),
-            pl.lit(info["End date"]).alias("end_date"),
-            pl.lit(num_fold).alias("fold")
+            pl.lit(model.model_name, dtype=pl.Utf8).alias("model"),
+            pl.lit(info["Start date"], dtype=pl.Date).alias("start_date"),
+            pl.lit(info["End date"], dtype=pl.Date).alias("end_date"),
+            pl.lit(num_fold, dtype=pl.Int16).alias("fold")
         )
         validation_results.append(metrics)
 
     cv_results: pl.DataFrame = pl.concat(validation_results)
-    cv_results = cv_results.with_columns(pl.col("model").cast(pl.Categorical))
     return cv_results.sort("start_date"), model
 
 
