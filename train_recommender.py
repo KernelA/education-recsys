@@ -38,6 +38,7 @@ def main(config):
         user_item_interactions,
         user_column=USER_ID_COL,
         item_column=ITEM_ID_COL,
+        add_pos_neg_info=True,
         datetime_column=dt_col,
         fold_stats=True
     )

@@ -1,4 +1,4 @@
-_target_: recs_utils.implicit_model.ImplicitALS
+_target_: recs_utils.implicit_model.ImplicitRecommenderWithInterConf
 rating_col_name: 'progress'
 inner_model:
   _target_: implicit.als.AlternatingLeastSquares

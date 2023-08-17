@@ -1,13 +1,13 @@
 from collections import defaultdict
 from typing import Callable
 
-import pandas as pd
 import polars as pl
 from scipy.spatial import distance
 from tqdm.auto import tqdm
 
 from .base_model import BaseRecommender
 from .constants import ITEM_ID_COL, TARGET_COL, USER_ID_COL
+from .neg_samples import select_pos_samples
 
 
 def _compute_diversity_value(condensed_distance_matrix, num_items: int):
@@ -108,8 +108,7 @@ def model_cross_validate(
         test_interactions = user_item_interactions.join(
             test_idx, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
 
-        if TARGET_COL in test_interactions.columns:
-            test_interactions = test_interactions.filter(pl.col(TARGET_COL) > 0)
+        test_interactions = select_pos_samples(test_interactions)
 
         test_item_features = item_features.filter(pl.col(ITEM_ID_COL).is_in(
             test_interactions.get_column(ITEM_ID_COL).unique()))

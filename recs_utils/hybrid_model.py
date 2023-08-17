@@ -168,7 +168,8 @@ class LightFMRecommender(BaseRecommender):
 
         predicted_local_item_ids = []
 
-        pred_progress = tqdm(total=len(local_user_ids), disable=not is_pred_progress, mininterval=3)
+        pred_progress = tqdm(total=len(local_user_ids),
+                             disable=not is_prediction_progress, mininterval=3)
 
         while start_index < len(local_user_ids):
             local_user_ids_batch = local_user_ids[start_index: start_index + user_batch_size]

@@ -1,6 +1,5 @@
-import logging
 import warnings
-from typing import Iterable, Optional
+from typing import Optional
 
 import numpy as np
 import polars as pl
@@ -9,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 
 from .base_model import BaseItemSim
 from .matrix_ops import interactions_to_csr_matrix
+from .neg_samples import select_pos_samples
 
 
 def to_light_fm_feature(row_info: dict, entity_key: str):
@@ -36,11 +36,14 @@ class ImplicitRecommender(BaseItemSim):
 
     def fit(self,
             user_item_interactions: pl.DataFrame,
-            progress: bool = False,
             user_features=None,
             item_features=None,
+            progress: bool = False,
             fitted_user_encoder: Optional[LabelEncoder] = None,
-            fitted_item_encoder: Optional[LabelEncoder] = None):
+            fitted_item_encoder: Optional[LabelEncoder] = None,
+            **kwargs):
+        user_item_interactions = select_pos_samples(user_item_interactions)
+
         if fitted_user_encoder is not None:
             self._user_encoder = fitted_user_encoder
 
@@ -91,7 +94,8 @@ class ImplicitRecommender(BaseItemSim):
                   num_recs_per_user: int = 10,
                   user_features: Optional[pl.DataFrame] = None,
                   item_features: Optional[pl.DataFrame] = None,
-                  filter_already_liked_items: bool = True):
+                  filter_already_liked_items: bool = True,
+                  **kwargs):
         assert self._train_matrix is not None, "Train first"
         assert self._schema is not None, "Train first"
         assert self._user_encoder is not None
@@ -132,10 +136,10 @@ class ImplicitRecommender(BaseItemSim):
         return recs
 
 
-class ImplicitALS(ImplicitRecommender):
+class ImplicitRecommenderWithInterConf(ImplicitRecommender):
     def __init__(self,
                  inner_model: ImplicitBase,
-                 rating_col_name: Optional[str] = None,
+                 rating_col_name: str,
                  user_col: str = "user_id",
                  item_column: str = "item_id",
                  dt_column: str = "start_date",
