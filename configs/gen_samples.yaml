@@ -12,8 +12,6 @@ defaults:
   - model@simple_model: bm25
   - _self_
 
-minimum_interacted_items: 4
-
 cv:
   num_periods: 1
   num_recs: 20

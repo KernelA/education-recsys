@@ -1,16 +1,15 @@
 import datetime
 import logging
-import os
 import pathlib
 
 import hydra
 import polars as pl
 
 from recs_utils.base_model import BaseRecommender
-from recs_utils.constants import ITEM_ID_COL, USER_ID_COL
+from recs_utils.constants import ITEM_ID_COL, TARGET_COL, USER_ID_COL
+from recs_utils.load_data import MTSDataset
 from recs_utils.log_set import init_logging
-from recs_utils.neural_network.neg_samples import (compute_stat,
-                                                   get_pos_neg_samples)
+from recs_utils.neg_samples import select_pos_samples
 from recs_utils.split import TimeRangeSplit
 
 
@@ -21,22 +20,18 @@ def main(config):
     users = pl.read_parquet(orig_cwd / config.data.dump_files.users_path)
 
     users = users.with_columns(
-        pl.col("sex").fill_null(-1),
-        pl.col("age").cast(str).fill_null("unknown").cast(pl.Categorical))
+        pl.col("sex").fill_null("unknown"),
+        pl.col("age").fill_null("unknown"))
 
-    items = pl.read_parquet(orig_cwd / config.data.dump_files.items_path)
+    items = MTSDataset.select_genres(pl.read_parquet(
+        orig_cwd / config.data.dump_files.items_path), cov=0.95, null_value="unknown")
 
     interactions = pl.read_parquet(orig_cwd / config.data.dump_files.interactions_path).filter(
         pl.col(USER_ID_COL).is_in(users.get_column(USER_ID_COL).unique()) & pl.col(
             ITEM_ID_COL).is_in(items.get_column(ITEM_ID_COL).unique())
     )
 
-    selected_user = interactions.lazy().groupby(USER_ID_COL).agg(
-        pl.count(ITEM_ID_COL).alias("num_interacted_items")).filter(pl.col("num_interacted_items") >= config.minimum_interacted_items).collect().get_column(USER_ID_COL).unique()
-
-    interactions = interactions.filter(pl.col(USER_ID_COL).is_in(selected_user))
-
-    del selected_user
+    interactions = MTSDataset.filter_noise_interactions(interactions)
 
     dt_col = config.cv.dt_column
     last_date = interactions.get_column(dt_col).max()
@@ -52,7 +47,8 @@ def main(config):
         user_column=USER_ID_COL,
         item_column=ITEM_ID_COL,
         datetime_column=dt_col,
-        fold_stats=True
+        fold_stats=True,
+        add_pos_neg_info=True
     )
     )[0]
 
@@ -62,10 +58,10 @@ def main(config):
     train_inter = interactions.join(train_index, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
     test_inter = interactions.join(test_index, on=[USER_ID_COL, ITEM_ID_COL], how="inner")
 
-    train_user_stat = compute_stat(train_inter)
-    train_pos_inter, train_neg_inter = get_pos_neg_samples(train_inter, train_user_stat)
-
-    del train_user_stat
+    test_inter = select_pos_samples(test_inter)
+    train_pos_inter = select_pos_samples(train_inter)
+    train_neg_inter = train_inter.join(train_pos_inter.select(
+        pl.col(USER_ID_COL), pl.col(ITEM_ID_COL)), on=[USER_ID_COL, ITEM_ID_COL], how="anti")
 
     assert train_pos_inter.get_column(USER_ID_COL).n_unique() == train_inter.get_column(
         USER_ID_COL).n_unique(), "Not all users have pos samples"
@@ -89,9 +85,9 @@ def main(config):
         predicted_recs: pl.DataFrame = simple_model.recommend(train_inter.filter(
             pl.col(USER_ID_COL).is_in(users_without_neg_samples)), num_recs_per_user=config.cv.num_recs)
 
-        train_neg_inter = train_neg_inter.select(pl.col(USER_ID_COL, ITEM_ID_COL, "target")).vstack(
+        train_neg_inter = train_neg_inter.select(pl.col(USER_ID_COL, ITEM_ID_COL, TARGET_COL)).vstack(
             predicted_recs.join(train_inter, on=[USER_ID_COL, ITEM_ID_COL], how="anti").select(
-                pl.col(USER_ID_COL, ITEM_ID_COL)).with_columns(pl.lit(0, dtype=train_pos_inter.schema["target"]).alias("target"))
+                pl.col(USER_ID_COL, ITEM_ID_COL)).with_columns(pl.lit(0, dtype=train_pos_inter.schema[TARGET_COL]).alias(TARGET_COL))
         )
 
     assert train_neg_inter.get_column(USER_ID_COL).n_unique() == train_inter.get_column(
@@ -101,7 +97,7 @@ def main(config):
         USER_ID_COL).agg(pl.n_unique(ITEM_ID_COL)).mean()[0, 1])
 
     train_samples = train_pos_inter.select(
-        pl.col(USER_ID_COL, ITEM_ID_COL, "target")).vstack(train_neg_inter)
+        pl.col(USER_ID_COL, ITEM_ID_COL, TARGET_COL)).vstack(train_neg_inter)
 
     data_dir = pathlib.Path("interactions")
     data_dir.mkdir(exist_ok=True)

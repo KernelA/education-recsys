@@ -1,13 +1,12 @@
 import pathlib
 
 import hydra
-import numpy as np
 import polars as pl
 import torch
 from sklearn.preprocessing import LabelEncoder
 from torch.utils import data
 from torch.utils.tensorboard import SummaryWriter
-from tqdm.auto import tqdm, trange
+from tqdm.auto import trange
 
 from recs_utils.constants import ITEM_ID_COL, USER_ID_COL
 from recs_utils.log_set import init_logging
@@ -72,12 +71,14 @@ def main(config):
                                                           )
     model.to(device)
 
+    model = torch.jit.script(model)
+
     loss_module = hydra.utils.instantiate(config.loss)
     optimizer = hydra.utils.instantiate(config.optimizer, model.parameters())
     scheduler = None
 
     if config.scheduler is not None:
-        scheduler = hydra.utils.instantiate(optimizer)
+        scheduler = hydra.utils.instantiate(config.scheduler, optimizer)
 
     with SummaryWriter(log_dir="training-logs", flush_secs=20) as logger:
         epoch_range = trange(config.train_params.epochs)

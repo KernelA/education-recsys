@@ -20,4 +20,4 @@ feature_dir: ./exp/neural-net/features-processed
 train_params:
   train_size: 0.8
   batch_size: 30_000
-  epochs: 10
+  epochs: 20

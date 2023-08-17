@@ -1,12 +1,8 @@
 import pathlib
 
-import fasttext
 import hydra
-import numpy as np
 import polars as pl
-from huggingface_hub import hf_hub_download
 
-from recs_utils.constants import ITEM_ID_COL
 from recs_utils.log_set import init_logging
 
 
@@ -21,24 +17,18 @@ def main(process_features):
     users.write_parquet("user_features.parquet")
 
     del users
+
     items = pl.read_parquet(data_dir / "items.parquet")
-    items = items.with_columns(
-        pl.col("title").str.strip().str.to_lowercase().alias("title"),
-        pl.col("genres").cast(str).fill_null("unknown").str.strip().str.to_lowercase().str.split(
-            ",").arr.sort().arr.join(" ").fill_null("unknown").alias("genres")
-    )
 
-    model_path = hf_hub_download(repo_id="kernela/fasttext-ru-vectors-dim-100",
-                                 filename="ru-vectors-dim-100.bin", cache_dir=orig_cwd / "hub-cache")
-    model = fasttext.load_model(model_path)
+    item_features = items.lazy().select(
+        pl.col("genres").str.split(","),
+        pl.col("item_id")).explode("genres").with_columns(pl.lit(1, dtype=pl.Int8).alias("genre_feature")).collect().pivot(
+        values="genre_feature",
+        index="item_id",
+        columns="genres",
+        aggregate_function="max"
+    ).fill_null(0)
 
-    genres_embeddings = []
-
-    for row in items.iter_rows(named=True):
-        genres_embeddings.append(model.get_sentence_vector(row["genres"]).reshape(1, -1))
-
-    item_features = pl.DataFrame(np.concatenate(genres_embeddings, axis=0)
-                                 ).hstack([items.get_column(ITEM_ID_COL)])
     item_features.write_parquet("items.parquet")
 
 
