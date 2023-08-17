@@ -55,6 +55,12 @@ class NeuralNetRecommender(nn.Module):
                                       hidden_dim=hidden_dim,
                                       out_features=out_features)
 
+    def get_user_embedding(self, user_ids: torch.LongTensor, user_features: torch.Tensor):
+        return self.user_model(user_ids, user_features)
+
+    def get_item_embedding(self, item_ids: torch.LongTensor, item_features: torch.Tensor):
+        return self.item_model(item_ids, item_features)
+
     def forward(self,
                 user_ids: torch.LongTensor,
                 user_features: torch.Tensor,
@@ -64,4 +70,4 @@ class NeuralNetRecommender(nn.Module):
                 neg_item_features: torch.Tensor):
         assert user_ids.shape[0] == neg_item_ids.shape[0] == pos_item_ids.shape[0], "Number of samples must be same as number of users"
 
-        return self.user_model(user_ids, user_features), self.item_model(pos_item_ids, pos_item_features), self.item_model(neg_item_ids, neg_item_features)
+        return self.get_user_embedding(user_ids, user_features), self.get_item_embedding(pos_item_ids, pos_item_features), self.get_item_embedding(neg_item_ids, neg_item_features)

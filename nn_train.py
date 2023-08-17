@@ -13,6 +13,11 @@ from recs_utils.log_set import init_logging
 from recs_utils.neural_network.dataset import TripletDataset
 from recs_utils.neural_network.model import NeuralNetRecommender
 from recs_utils.neural_network.training import train_one_epoch, valid_one_epoch
+from recs_utils.utils import save_pickle
+
+
+def save_model(model: torch.nn.Module, path_to_file: pathlib.Path):
+    torch.save(model.state_dict(), path_to_file)
 
 
 def simple_collat_fn(sample):
@@ -35,6 +40,9 @@ def main(config):
 
     user_encoder = LabelEncoder()
     user_encoder.fit(train_inter.get_column(USER_ID_COL).unique().to_numpy())
+
+    save_pickle("user_encoder.pickle", user_encoder)
+    save_pickle("item_encoder.pickle", item_encoder)
 
     dataset = TripletDataset(train_inter, user_features, item_features,
                              user_encoder=user_encoder,
@@ -70,7 +78,6 @@ def main(config):
                                                           num_item_features=item_features.shape[1] - 1,
                                                           )
     model.to(device)
-
     model = torch.jit.script(model)
 
     loss_module = hydra.utils.instantiate(config.loss)
@@ -79,6 +86,11 @@ def main(config):
 
     if config.scheduler is not None:
         scheduler = hydra.utils.instantiate(config.scheduler, optimizer)
+
+    last_valid_loss = None
+
+    checkpoint_dir = pathlib.Path("checkpoints")
+    checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
     with SummaryWriter(log_dir="training-logs", flush_secs=20) as logger:
         epoch_range = trange(config.train_params.epochs)
@@ -102,6 +114,14 @@ def main(config):
                     device=device
                 )
 
+                if last_valid_loss is None:
+                    last_valid_loss = valid_loss
+                    save_model(model, checkpoint_dir / "best-val-loss.ckpt")
+
+                if valid_loss < last_valid_loss:
+                    last_valid_loss = valid_loss
+                    save_model(model, checkpoint_dir / "best-val-loss.ckpt")
+
                 logger.add_scalar("Loss/valid", valid_loss, global_step=epoch, new_style=True)
                 epoch_range.set_postfix({"Train epoch loss": train_loss,
                                         "Valid epoch loss": valid_loss})
@@ -113,6 +133,9 @@ def main(config):
                     scheduler.step()
 
             epoch_range.set_postfix({"Train epoch loss": train_loss})
+
+            if epoch % 2 == 0 or epoch == config.train_params.epochs - 1:
+                save_model(model, checkpoint_dir / "last.ckpt")
 
 
 if __name__ == "__main__":

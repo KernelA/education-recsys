@@ -1,4 +1,4 @@
-from typing import Iterator, Sequence, Union
+from typing import Sequence, Union
 
 import numpy as np
 import polars as pl
@@ -6,7 +6,7 @@ import torch
 from sklearn.preprocessing import LabelEncoder
 from torch.utils import data
 
-from ..constants import ITEM_ID_COL, USER_ID_COL
+from ..constants import ITEM_ID_COL, TARGET_COL, USER_ID_COL
 
 
 class ShiftInfo:
@@ -36,7 +36,7 @@ class UserDataset(data.Dataset):
         return len(self.user_ids)
 
     def get_by_user_id(self, user_id: Union[int, np.ndarray]):
-        if isinstance(user_id, int):
+        if isinstance(user_id, int) or np.isscalar(user_id):
             user_id = [user_id]
 
         indices = np.searchsorted(self.user_ids, user_id)
@@ -70,7 +70,7 @@ class ItemDataset(data.Dataset):
         return len(self.item_ids)
 
     def get_by_item_id(self, item_id: Union[int, np.ndarray]):
-        if isinstance(item_id, int):
+        if isinstance(item_id, int) or np.isscalar(item_id):
             item_id = [item_id]
 
         indices = np.searchsorted(self.item_ids, item_id)
@@ -93,9 +93,10 @@ class TripletDataset(data.Dataset):
                  user_encoder: LabelEncoder,
                  item_encoder: LabelEncoder):
 
-        self.pos_samples = samples.filter(pl.col("target") == 1).select(
+        self.pos_samples = samples.filter(pl.col(TARGET_COL) == 1).select(
             pl.col(USER_ID_COL, ITEM_ID_COL))
-        neg_samples = samples.filter(pl.col("target") == 0).select(pl.col(USER_ID_COL, ITEM_ID_COL))
+        neg_samples = samples.filter(pl.col(TARGET_COL) == 0).select(
+            pl.col(USER_ID_COL, ITEM_ID_COL))
 
         self.user_dataset = UserDataset(user_features.join(
             samples.select(pl.col(USER_ID_COL)), on=[USER_ID_COL], how="inner"), user_encoder=user_encoder)
