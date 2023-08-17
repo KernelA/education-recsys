@@ -1,8 +1,8 @@
 _target_: recs_utils.hybrid_model.LightFMRecommender
 num_epoch: 10
 num_threads: 6
-progress_column: null
-pos_neg_column: 'target'
+progress_column: 'progress'
+pos_neg_column: null
 progress_quant_level: 5
 model:
   _target_: lightfm.lightfm.LightFM
@@ -10,7 +10,7 @@ model:
   k: 5
   n: 10
   learning_schedule: "adagrad"
-  loss: "logistic"
+  loss: "warp"
   learning_rate: 0.13
   rho: 0.95
   epsilon: 1e-6
