@@ -22,8 +22,24 @@ class LightFMRecommender(BaseRecommender):
                  item_column: str = "item_id",
                  dt_column: str = "start_date",
                  progress_column: Optional[str] = None,
+                 pos_neg_column: Optional[str] = None,
                  progress_quant_level: int = 5,
                  ):
+        if progress_column is not None:
+            if pos_neg_column is not None:
+                raise ValueError("Cannot use progress_column with positive/negative column")
+
+            if model.loss != "logistic":
+                raise ValueError(
+                    "You muts other than 'logistic' when no info about positive and negative interactions")
+
+        if pos_neg_column is not None:
+            if progress_column is not None:
+                raise ValueError("Cannot use positive/negative column with progress_column")
+
+            if model.loss != "logistic":
+                raise ValueError("You muts other than 'logistic' when no info about positive and negative interactions")
+
         super().__init__(user_col=user_col, item_column=item_column, dt_column=dt_column)
         self._model = model
         self.num_epoch = num_epoch
@@ -36,6 +52,7 @@ class LightFMRecommender(BaseRecommender):
         self.user_mapping = {}
         self.item_mapping = {}
         self.inv_item_mapping = {}
+        self._pos_neg_column = pos_neg_column
         self._progress_quant_level = progress_quant_level
 
     @property
@@ -91,6 +108,12 @@ class LightFMRecommender(BaseRecommender):
                 (pl.col(self._progress_column) // self._progress_quant_level) * self._progress_quant_level)
 
             inter_cols.append(pl.col(self._progress_column))
+
+        if self._pos_neg_column is not None:
+            user_item_interactions = user_item_interactions.with_columns(
+                pl.when(pl.col(self._pos_neg_column) > 0).then(1).otherwise(-1)
+            )
+            inter_cols.append(pl.col(self._pos_neg_column))
 
         _, train_weight_matrix = dataset.build_interactions(user_item_interactions.select(
             inter_cols
