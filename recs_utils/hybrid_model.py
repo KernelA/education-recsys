@@ -29,16 +29,17 @@ class LightFMRecommender(BaseRecommender):
             if pos_neg_column is not None:
                 raise ValueError("Cannot use progress_column with positive/negative column")
 
-            if model.loss != "logistic":
+            if model.loss == "logistic":
                 raise ValueError(
-                    "You muts other than 'logistic' when no info about positive and negative interactions")
+                    "You must set other than 'logistic' when no info about positive and negative interactions")
 
         if pos_neg_column is not None:
             if progress_column is not None:
                 raise ValueError("Cannot use positive/negative column with progress_column")
 
             if model.loss != "logistic":
-                raise ValueError("You muts other than 'logistic' when no info about positive and negative interactions")
+                raise ValueError(
+                    "You must set other than 'logistic' when no info about positive and negative interactions")
 
         super().__init__(user_col=user_col, item_column=item_column, dt_column=dt_column)
         self._model = model
