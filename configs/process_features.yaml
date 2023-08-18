@@ -1,0 +1,13 @@
+hydra:
+  run:
+    dir: ./exp/neural-net/features-processed
+  sweep:
+    dir: ./exp/neural-net/features-processed
+    subdir: ${hydra.job.num}_${hydra.job.override_dirname}
+  job:
+    chdir: true
+
+defaults:
+  - _self_
+
+orig_features_dir: ./exp/neural-net/data/features

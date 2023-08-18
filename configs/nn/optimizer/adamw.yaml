@@ -1,0 +1,3 @@
+_target_: torch.optim.AdamW
+fused: true
+lr: 1.0e-5

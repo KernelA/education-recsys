@@ -30,14 +30,13 @@ hydra:
       model.inner_model.alpha: 1.0
       model.inner_model.iterations: range(5, 10)
 
-
 defaults:
   - model: als
   - data: mts_lib
   - cv: base
+  - wandb: base
   - override hydra/sweeper: optuna
   - _self_
 
-
-
-
+wandb:
+  group: "als-hyperparams-search"

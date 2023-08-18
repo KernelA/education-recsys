@@ -143,4 +143,5 @@ cython_debug/
 /catboost-dir
 *.cbm
 /exp
+/hub-cache
 nohup.out

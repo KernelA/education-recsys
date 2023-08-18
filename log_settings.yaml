@@ -1,10 +1,10 @@
 version: 1
 formatters:
   default_console_thread:
-    (): metrics.log_set.utc_formatter.UTCFormatter
+    (): recs_utils.log_set.utc_formatter.UTCFormatter
     format: '%(asctime)s %(levelname)s %(threadName)s %(module)s %(funcName)s %(message)s'
   default_console_process:
-    (): metrics.log_set.utc_formatter.UTCFormatter
+    (): recs_utils.log_set.utc_formatter.UTCFormatter
     format: '%(asctime)s %(levelname)s %(processName)s %(module)s %(funcName)s %(message)s'
 handlers:
   console:

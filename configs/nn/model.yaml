@@ -1,0 +1,4 @@
+_target_: recs_utils.neural_network.model.NeuralNetRecommender
+embedding_size: 100
+hidden_dim: 128
+out_features: 64
