@@ -101,4 +101,42 @@ stages:
       - ${dump_files.items_path}
     outs:
       - ${hydra.sweep.dir}
+
+  nn_gen_pos_neg_samples:
+    vars:
+      - ./configs/gen_samples.yaml
+      - ./configs/data/mts_lib.yaml
+    cmd: python ./nn_gen_pos_neg_samples.py
+    deps: 
+      - ${dump_files.interactions_path}
+      - ${dump_files.users_path}
+      - ${dump_files.items_path}
+      - ./nn_gen_pos_neg_samples.py
+      - ./configs/gen_samples.yaml
+    outs:
+      - ${hydra.run.dir}
+
+  nn_process_features:
+    vars:
+      - ./configs/process_features.yaml
+    cmd: python ./nn_process_features.py
+    deps: 
+      - ./nn_process_features.py
+      - ${orig_features_dir}
+      - ./configs/process_features.yaml
+    outs:
+      - ${hydra.run.dir}
   
+
+  nn_train:
+    vars:
+      - ./configs/nn_rec.yaml
+    cmd: python ./nn_train.py
+    deps:
+      - ./nn_train.py
+      - ./configs/nn_rec.yaml
+      - ${data_dir}
+      - ${feature_dir}
+    outs:
+      - ${hydra.run.dir}
+

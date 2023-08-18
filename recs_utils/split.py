@@ -1,7 +1,10 @@
-from typing import Tuple, Optional, Sequence, Union
 import datetime
+from typing import Optional, Sequence, Tuple, Union
 
 import polars as pl
+
+from .constants import TARGET_COL
+from .neg_samples import compute_stat, get_pos_neg_samples
 
 
 class TimeRangeSplit:
@@ -89,13 +92,14 @@ class TimeRangeSplit:
         return test_index, test_mask, len(cold_ent_ids), len(cold_end_index)
 
     def split(self,
-              df: pl.DataFrame,
+              interactions: pl.DataFrame,
               user_column: str = 'user_id',
               item_column: str = 'item_id',
               datetime_column: str = 'date',
+              add_pos_neg_info: bool = False,
               fold_stats: bool = False):
 
-        df_datetime = df.select(pl.col(datetime_column)).to_series()
+        df_datetime = interactions.select(pl.col(datetime_column)).to_series()
 
         if self.train_min_date is not None:
             train_min_mask = df_datetime >= self.train_min_date
@@ -114,7 +118,8 @@ class TimeRangeSplit:
                 'End date': end
             }
             train_mask = train_min_mask & (df_datetime < start)
-            train_idx = df.filter(train_mask).select(
+
+            train_idx = interactions.filter(train_mask).select(
                 pl.col(user_column),
                 pl.col(item_column)
             )
@@ -122,16 +127,35 @@ class TimeRangeSplit:
             if fold_stats:
                 fold_info['Train'] = len(train_idx)
 
+                if add_pos_neg_info:
+                    train_inter = interactions.join(
+                        train_idx, on=[user_column, item_column])
+
+                    train_user_stat = compute_stat(train_inter)
+                    train_pos_samples, train_neg_samples = get_pos_neg_samples(
+                        train_inter, train_user_stat)
+
+                    fold_info["Train pos samples"] = len(train_pos_samples)
+                    fold_info["Train neg samples"] = len(train_neg_samples)
+
+                    train_idx = train_idx.lazy().join(
+                        train_pos_samples.vstack(train_neg_samples).lazy(), on=[user_column, item_column]).select(
+                            user_column, item_column, TARGET_COL
+                    ).collect()
+
+                    del train_neg_samples
+                    del train_pos_samples
+
             test_mask = (df_datetime >= start) & (df_datetime < end)
 
-            test_idx = df.filter(test_mask).select(
+            test_idx = interactions.filter(test_mask).select(
                 pl.col(user_column),
                 pl.col(item_column)
             )
 
             if self.filter_cold_users:
                 test_idx, test_mask, num_cold_entities, num_cold_interactions = self._filter_cold_entities(
-                    train_idx, test_idx, test_mask, df, user_column)
+                    train_idx, test_idx, test_mask, interactions, user_column)
 
                 if fold_stats:
                     fold_info['New users'] = num_cold_entities
@@ -139,7 +163,7 @@ class TimeRangeSplit:
 
             if self.filter_cold_items:
                 test_idx, test_mask, num_cold_entities, num_cold_interactions = self._filter_cold_entities(
-                    train_idx, test_idx, test_mask, df, item_column)
+                    train_idx, test_idx, test_mask, interactions, item_column)
 
                 if fold_stats:
                     fold_info['New items'] = num_cold_entities
@@ -158,6 +182,18 @@ class TimeRangeSplit:
 
             if fold_stats:
                 fold_info['Test'] = len(test_idx)
+
+                if add_pos_neg_info:
+                    test_inter = interactions.join(test_idx, on=[user_column, item_column])
+                    test_pos_samples, test_neg_samples = get_pos_neg_samples(
+                        test_inter, train_user_stat)
+                    fold_info["Test pos samples"] = len(test_pos_samples)
+                    fold_info["Test neg samples"] = len(test_neg_samples)
+
+                    test_idx = test_idx.lazy().join(
+                        test_pos_samples.vstack(test_neg_samples).lazy(), on=[user_column, item_column]).select(
+                            user_column, item_column, TARGET_COL
+                    ).collect()
 
             yield (train_idx, test_idx, fold_info)
 

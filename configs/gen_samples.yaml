@@ -1,0 +1,21 @@
+hydra:
+  run:
+    dir: ./exp/neural-net/data
+  sweep:
+    dir: ./exp/neural-net/data
+    subdir: ${hydra.job.num}_${hydra.job.override_dirname}
+  job:
+    chdir: true
+
+defaults:
+  - data: mts_lib
+  - model@simple_model: bm25
+  - _self_
+
+cv:
+  num_periods: 1
+  num_recs: 20
+  dt_column: "start_date"
+  period:
+    _target_: "datetime.timedelta"
+    days: 7

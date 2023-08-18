@@ -1,11 +1,11 @@
-from abc import ABC, abstractmethod
 import datetime
 from typing import Optional
 
-import polars as pl
 import numpy as np
+import polars as pl
 
 from .base_model import BaseRecommender
+from .neg_samples import select_pos_samples
 
 
 class PopularRecommender(BaseRecommender):
@@ -24,9 +24,10 @@ class PopularRecommender(BaseRecommender):
     def model_name(self):
         return "most_popular"
 
-    def fit(self, interactions: pl.DataFrame, user_features=None, item_features=None):
-        min_date = interactions.select(pl.col(self.dt_column).max())[
-            0, 0] - datetime.timedelta(days=self.days)
+    def fit(self, interactions: pl.DataFrame, user_features=None, item_features=None, **kwargs):
+        interactions = select_pos_samples(interactions)
+        min_date = interactions.get_column(self.dt_column).max() - \
+            datetime.timedelta(days=self.days)
 
         self.recommendations = interactions.lazy()\
             .filter(pl.col(self.dt_column) > min_date)\
@@ -39,7 +40,7 @@ class PopularRecommender(BaseRecommender):
             .collect()\
 
 
-    def recommend(self, user_item_interactions: pl.DataFrame, num_recs_per_user: int = 10, user_features=None, item_features=None):
+    def recommend(self, user_item_interactions: pl.DataFrame, num_recs_per_user: int = 10, user_features=None, item_features=None, **kwargs):
         assert self.recommendations is not None, "fit(...) first"
 
         recs_items = self.recommendations.head(n=num_recs_per_user)
@@ -73,9 +74,11 @@ class PopularRecommenderPerAge(BaseRecommender):
     def model_name(self):
         return "most_popular_per_age"
 
-    def fit(self, user_item_interactions: pl.DataFrame, user_features: pl.DataFrame, item_features=None):
-        min_date = user_item_interactions.select(pl.col(self.dt_column).max())[
-            0, 0] - datetime.timedelta(days=self.days)
+    def fit(self, user_item_interactions: pl.DataFrame, user_features: pl.DataFrame, item_features=None, **kwargs):
+        user_item_interactions = select_pos_samples(user_item_interactions)
+
+        min_date = user_item_interactions.get_column(
+            self.dt_column).max() - datetime.timedelta(days=self.days)
 
         self.recommendations_per_age = user_item_interactions.lazy()\
             .filter(pl.col(self.dt_column) > min_date)\
@@ -88,7 +91,9 @@ class PopularRecommenderPerAge(BaseRecommender):
 
         self._top_n.fit(user_item_interactions)
 
-    def recommend(self, user_item_interactions: pl.DataFrame, num_recs_per_user: int = 10, user_features: Optional[pl.DataFrame] = None, item_features=None):
+    def recommend(self, user_item_interactions: pl.DataFrame, num_recs_per_user: int = 10,
+                  user_features: Optional[pl.DataFrame] = None,
+                  item_features=None, **kwargs):
         assert self.recommendations_per_age is not None
         assert user_features is not None
 
