@@ -117,14 +117,14 @@ stages:
       size: 497148
     - path: ./train_recommender.py
       hash: md5
-      md5: f0ba1f3b816bafa9ae60e24847f2b671
-      size: 2514
+      md5: 72a726d295857389853de02bd8caf8da
+      size: 2622
     outs:
     - path: ./exp/cross_val_fast
       hash: md5
-      md5: a4e43f91d505921c715b60c5489da10b.dir
-      size: 564785
-      nfiles: 88
+      md5: 0ff7f28e2a82f0e1b96bfa0f8c61f372.dir
+      size: 81171
+      nfiles: 31
   cross_validate_als:
     cmd: python ./train_recommender.py -m model=als hydra.sweep.dir=./exp/cross_val_als
     deps:
@@ -134,8 +134,8 @@ stages:
       size: 269
     - path: ./configs/model/als.yaml
       hash: md5
-      md5: ba143cb49ac3a20d9bd13857b2816b92
-      size: 247
+      md5: 7dca4f818a53ebdfc9294e611c5825fe
+      size: 268
     - path: ./data/mts/dump/interactions.parquet
       hash: md5
       md5: 234b9ef93d3592e00bfe1bc6b368fad7
@@ -150,14 +150,14 @@ stages:
       size: 497148
     - path: ./train_recommender.py
       hash: md5
-      md5: f0ba1f3b816bafa9ae60e24847f2b671
-      size: 2514
+      md5: 72a726d295857389853de02bd8caf8da
+      size: 2622
     outs:
     - path: ./exp/cross_val_als
       hash: md5
-      md5: 3cb79ff6f5adcd61da1dd96072a275d0.dir
-      size: 152138
-      nfiles: 20
+      md5: fa00a3953aad5296ddcad6b545d694b4.dir
+      size: 20775
+      nfiles: 7
   cross_validate_lightgm:
     cmd: python ./train_recommender.py -m model=lightfm hydra.sweep.dir=./exp/cross_val_lightfm
     deps:
@@ -167,8 +167,8 @@ stages:
       size: 269
     - path: ./configs/model/lightfm.yaml
       hash: md5
-      md5: 5bd269df1075cdabfc35daf85897a4d0
-      size: 379
+      md5: 1ffdd978f22abf747d20a1d7fa54dd93
+      size: 400
     - path: ./data/mts/dump/interactions.parquet
       hash: md5
       md5: 234b9ef93d3592e00bfe1bc6b368fad7
@@ -183,13 +183,13 @@ stages:
       size: 497148
     - path: ./train_recommender.py
       hash: md5
-      md5: 5433b2b82edcaf0e0f876066aa71464d
-      size: 2591
+      md5: 72a726d295857389853de02bd8caf8da
+      size: 2622
     outs:
     - path: ./exp/cross_val_lightfm
       hash: md5
-      md5: 0ae3bc0a8af2b7d73f7200ce7a5b7c0b.dir
-      size: 18307
+      md5: e728523485e9c4e839ad7c4ad1413be9.dir
+      size: 18656
       nfiles: 7
   als_hyperparams_search:
     cmd: python ./train_recommender.py -m -cn als_optim
@@ -257,3 +257,81 @@ stages:
       md5: 261fb6570e06b527fd587cb374f217d3.dir
       size: 149547
       nfiles: 61
+  nn_gen_pos_neg_samples:
+    cmd: python ./nn_gen_pos_neg_samples.py
+    deps:
+    - path: ./configs/gen_samples.yaml
+      hash: md5
+      md5: c7e984adafc6070b7d39cc99eae72a09
+      size: 356
+    - path: ./data/mts/dump/interactions.parquet
+      hash: md5
+      md5: 234b9ef93d3592e00bfe1bc6b368fad7
+      size: 11186434
+    - path: ./data/mts/dump/items.parquet
+      hash: md5
+      md5: dc0db0ff5d03064ad5224f8659311adc
+      size: 2156181
+    - path: ./data/mts/dump/users.parquet
+      hash: md5
+      md5: 7b199a5e38ea7d7232d5645734ff6830
+      size: 497148
+    - path: ./nn_gen_pos_neg_samples.py
+      hash: md5
+      md5: 10b534880a1335256cf58b92a2c11401
+      size: 5077
+    outs:
+    - path: ./exp/neural-net/data
+      hash: md5
+      md5: ae90ee235d8c38ea1d101734f5195840.dir
+      size: 10512394
+      nfiles: 9
+  nn_process_features:
+    cmd: python ./nn_process_features.py
+    deps:
+    - path: ./configs/process_features.yaml
+      hash: md5
+      md5: db64c4c4846ac05498bbc684c9ff1d3f
+      size: 268
+    - path: ./exp/neural-net/data/features
+      hash: md5
+      md5: f80422e0eb500c2361efee83a9febf1e.dir
+      size: 2488323
+      nfiles: 2
+    - path: ./nn_process_features.py
+      hash: md5
+      md5: 1aef0daa1fecf9b00c98d6762a2ab72a
+      size: 1077
+    outs:
+    - path: ./exp/neural-net/features-processed
+      hash: md5
+      md5: b82ffa404138911f77f795b1fa388a62.dir
+      size: 2752392
+      nfiles: 6
+  nn_train:
+    cmd: python ./nn_train.py
+    deps:
+    - path: ./configs/nn_rec.yaml
+      hash: md5
+      md5: a97a23c2ec287c08c8690e877fb995d4
+      size: 469
+    - path: ./exp/neural-net/data
+      hash: md5
+      md5: ae90ee235d8c38ea1d101734f5195840.dir
+      size: 10512394
+      nfiles: 9
+    - path: ./exp/neural-net/features-processed
+      hash: md5
+      md5: b82ffa404138911f77f795b1fa388a62.dir
+      size: 2752392
+      nfiles: 6
+    - path: ./nn_train.py
+      hash: md5
+      md5: 8546dbd1721b052824f36dd8590dacdf
+      size: 5657
+    outs:
+    - path: ./exp/neural-net/training
+      hash: md5
+      md5: 3369a5d75ca42a388b775bf3c4dedae2.dir
+      size: 133151437
+      nfiles: 9
